@@ -1,0 +1,31 @@
+[package]
+name = "ya-service-sdk"
+version = "0.1.0"
+authors = ["Golem Factory <contact@golem.network>"]
+edition = "2018"
+license = "GPL-3.0"
+
+[features]
+default = []
+macros = ["ya-service-sdk-derive"]
+
+[dependencies.ya-runtime-api]
+version = "0.1"
+features = ["codec"]
+git = "https://github.com/golemfactory/yagna.git"
+
+[dependencies]
+ya-service-sdk-derive = { version = "0.1", optional = true }
+
+anyhow = "1.0"
+directories = "3.0"
+futures = "0.3"
+serde = { version = "^1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.8"
+structopt = "0.3"
+tokio = { version = "0.2", features = ["io-std", "io-util", "rt-core", "rt-threaded", "macros"] }
+toml = "0.5"
+
+[patch.crates-io]
+ya-service-sdk-derive = { path = "derive" }
