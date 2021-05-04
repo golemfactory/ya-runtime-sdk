@@ -1,6 +1,6 @@
 pub mod cli;
 pub mod error;
-mod runner;
+pub mod runner;
 pub mod serialize;
 mod server;
 mod service;
@@ -10,7 +10,7 @@ pub use ya_runtime_api::server::{
 };
 
 pub use cli::Command;
-pub use runner::{ServiceMode, ServiceRunner};
+pub use runner::{run, ServiceMode};
 pub use service::*;
 
 #[cfg(feature = "macros")]
@@ -27,7 +27,7 @@ macro_rules! main {
     ($ty:ty) => {
         #[tokio::main]
         async fn main() -> anyhow::Result<()> {
-            ServiceRunner::<$ty>::run().await
+            crate::run::<$ty>().await
         }
     };
 }

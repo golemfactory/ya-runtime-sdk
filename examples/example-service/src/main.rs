@@ -53,7 +53,7 @@ impl Service for ExampleService {
 //
 // #[tokio::main]
 // async fn main() -> anyhow::Result<()> {
-//     ServiceRunner::<ExampleService>::run().await
+//     service_sdk::::run::<ExampleService>().await
 // }
 
 main!(ExampleService);
