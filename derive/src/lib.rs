@@ -28,7 +28,7 @@ fn impl_mod(
 ) -> proc_macro2::TokenStream {
     let mut impl_cli = quote::quote!();
     let mut impl_conf = quote::quote!(
-        #[derive(Default, ::serde::Deserialize)]
+        #[derive(Default, ::serde::Serialize, ::serde::Deserialize)]
         pub struct Conf {}
     );
 
