@@ -6,6 +6,10 @@ use ya_service_sdk::*;
 #[derive(StructOpt)]
 #[structopt(rename_all = "kebab-case")]
 pub struct ExampleCli {
+    /// Task package path (ignored in case of services)
+    // FIXME: currently, the ExeUnit Supervisor always passes this argument to a binary
+    #[allow(unused)]
+    task_package: Option<std::path::PathBuf>,
     /// Example service param
     #[allow(unused)]
     #[structopt(long, default_value = "1")]
