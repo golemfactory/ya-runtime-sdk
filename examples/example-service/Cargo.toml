@@ -6,14 +6,10 @@ edition = "2018"
 license = "GPL-3.0"
 
 [dependencies]
-ya-service-sdk = { version = "0.1", features = ["macros"] }
+ya-service-sdk = { version = "0.1", path = "../../ya-service-sdk", features = ["macros"] }
 
 anyhow = "1.0"
 futures = "0.3"
 serde = { version = "^1.0", features = ["derive"] }
 structopt = "0.3"
 tokio = { version = "0.2", features = ["io-std", "io-util", "rt-core", "rt-threaded", "macros"] }
-
-[patch.crates-io]
-ya-service-sdk = { path = "../.." }
-ya-service-sdk-derive = { path = "../../derive" }
