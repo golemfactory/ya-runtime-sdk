@@ -266,7 +266,7 @@ impl EventEmitter {
     }
 
     /// Emit an event
-    fn emit<'a>(&self, status: ProcessStatus) -> LocalBoxFuture<'a, ()> {
+    pub fn emit<'a>(&self, status: ProcessStatus) -> LocalBoxFuture<'a, ()> {
         self.inner.on_process_status(status);
         async move { () }.boxed_local()
     }
