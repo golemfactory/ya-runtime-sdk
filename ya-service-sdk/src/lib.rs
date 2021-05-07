@@ -5,12 +5,14 @@ pub mod serialize;
 mod server;
 mod service;
 
+pub use ya_runtime_api as runtime_api;
 pub use ya_runtime_api::server::{
     ErrorResponse, KillProcess, ProcessStatus, RunProcess, RuntimeEvent,
 };
 
 pub use cli::Command;
 pub use runner::{run, ServiceMode};
+pub use server::Server;
 pub use service::*;
 
 #[cfg(feature = "macros")]
