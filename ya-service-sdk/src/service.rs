@@ -187,18 +187,18 @@ impl<Svc: Service + ?Sized> Context<Svc> {
         Ok(conf_path)
     }
 
-    pub(crate) fn set_emitter(&mut self, emitter: Box<dyn RuntimeEvent>) {
-        self.emitter.replace(emitter.into());
+    pub(crate) fn set_emitter(&mut self, emitter: Box<dyn RuntimeEvent + Send + Sync>) {
+        self.emitter.replace(EventEmitter::new(emitter));
     }
 }
 
 #[derive(Clone)]
 pub struct EventEmitter {
-    inner: Arc<Box<dyn RuntimeEvent>>,
+    inner: Arc<Box<dyn RuntimeEvent + Send + Sync>>,
 }
 
-impl From<Box<dyn RuntimeEvent>> for EventEmitter {
-    fn from(emitter: Box<dyn RuntimeEvent>) -> Self {
+impl EventEmitter {
+    pub fn new(emitter: Box<dyn RuntimeEvent + Send + Sync>) -> Self {
         Self {
             inner: Arc::new(emitter),
         }
