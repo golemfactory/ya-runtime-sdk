@@ -96,7 +96,7 @@ where
 }
 
 impl<R: Runtime + ?Sized> Context<R> {
-    const CONF_EXTENSIONS: [&'static str; 3] = ["toml", "yaml", "json"];
+    const CONF_EXTENSIONS: [&'static str; 4] = ["toml", "yaml", "yml", "json"];
 
     pub fn try_new() -> anyhow::Result<Self> {
         let app = <R as RuntimeDef>::Cli::clap()
@@ -131,7 +131,7 @@ impl<R: Runtime + ?Sized> Context<R> {
         let contents = std::fs::read_to_string(path).with_context(err)?;
         let conf: <R as RuntimeDef>::Conf = match extension.as_str() {
             "toml" => toml::de::from_str(&contents).with_context(err)?,
-            "yaml" => serde_yaml::from_str(&contents).with_context(err)?,
+            "yaml" | "yml" => serde_yaml::from_str(&contents).with_context(err)?,
             "json" => serde_json::from_str(&contents).with_context(err)?,
             _ => anyhow::bail!("Unsupported extension: {}", extension),
         };
@@ -158,7 +158,7 @@ impl<R: Runtime + ?Sized> Context<R> {
 
         let contents = match extension.as_str() {
             "toml" => toml::ser::to_string_pretty(conf).with_context(err)?,
-            "yaml" => serde_yaml::to_string(conf).with_context(err)?,
+            "yaml" | "yml" => serde_yaml::to_string(conf).with_context(err)?,
             "json" => serde_json::to_string_pretty(conf).with_context(err)?,
             _ => anyhow::bail!("Unsupported extension: {}", extension),
         };
