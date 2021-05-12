@@ -1,58 +1,190 @@
-# ya-service-sdk
+# ya-runtime-sdk
 
-In order to implement a custom service, perform the following steps:
+`ya-runtime-sdk` is a Rust library for building new computation environments and self-contained runtimes for `yagna`,
+executed by Provider nodes in the Golem network.
 
-- `#[derive(Default, ServiceDef)]` on a service struct
-- implement the `Service` trait
-- use the `service_sdk::run` method to start the service
+The crate provides a default implementation and customizable wrappers in the following areas:
 
-## Example
+- interfacing with the computation orchestrator
+- runtime execution lifecycle
+- runtime state management
+- billing reports
 
-See the [example-service](https://github.com/golemfactory/ya-service-sdk/blob/main/examples/example-service/src/main.rs) project.
+## Runtime overview
 
-## Context
+Runtimes are responsible for executing provisions of the Agreement between a Provider and a Requestor. Runtimes are
+invoked only after a successful marketplace negotiation has taken place - the prices, deadlines and let hardware
+resources have been agreed upon, and where both sides are able to communicate over the network via a common protocol.
+Requestors are able to send ExeScripts to runtimes over the network, in order to control the flow of the computation.
 
-Each of the `Service` trait functions is parameterized with a mutable reference to the service object, and a service execution context object.
+Computation environments are fully and remotely controlled by Requestors. It's their responsibility to initialize the
+deployment (configuration) phase of the payload specified in an Agreement, followed by starting (bringing up) the
+environment, executing commands inside that environment and terminating the whole setup.
 
-The `Context` struct contains following properties:
+Self-contained runtimes on the other hand are built for specific use-cases, where the executed "payload" is 
+pre-defined by the implementor (e.g. access to a locally running SQL server). Deploying, starting, executing 
+commands (if implemented) and terminating the runtime can be only hinted by the Requestor; behaviour of those 
+actions is fully determined by implementation.
 
-- `cli` - command line arguments provided to the binary
-- `conf` - service configuration
-- `conf_path` - configuration file path on the local filesystem
-- `emitter` - a service event emitter (see [Events](#events))
+### Runtime orchestration
+
+Runtimes are a part of a logical building block called "ExeUnit". Runtime binaries are invoked by their orchestrating
+part, the ExeUnit Supervisor, utilizing a standardized set of arguments and flags. `ya-runtime-sdk` handles all command
+line interaction of the runtime binary - parses and validates the arguments to expose them later to the runtime
+implementation via an execution context parameter, passed to each method of the main `Runtime` interface.
+
+The `Runtime` interface provides means to customize application behaviour in each of execution phases:
+
+- deployment
+
+  Execute custom configuration steps.
+
+- start
+
+  Enable the runtime to be used by the Requestor.
+
+  Can be executed in one of the [execution modes](#runtime-execution-mode).
+
+- running a command
+
+  Parse, interpret and handle an array of string arguments. Implementation is optional for self-contained runtimes.
+
+  Can be executed in any of the [execution modes](#command-execution-mode)
+
+- killing a running command
+
+  Implementation is optional for self-contained runtimes.
+
+- stop
+
+  May be triggered by the Requestor or Provider Agent in a local provider setup, due to e.g. execution time constraints
+  specified in the Agreement. Runtime shutdown is given a short (less than 5s) time window to perform a graceful
+  shutdown, then the process is killed.
+
+#### Runtime execution mode
+
+There are 2 modes that a runtime can be executed in, defined by the developer as a constant `MODE` property of the 
+main trait.
+
+- `Server`
+
+  The `start` command implementation is intended to be long-running and awaiting termination either via `stop` or
+  receiving a signal by the process. Usually, `run` commands are expected to be invoked in `Server` mode (
+  see [command execution modes](#command-execution-mode)).
 
 
-## Configuration
+- `Command`
 
-One can define custom service configuration by
+  `start` command is a one-shot invocation, which returns promptly. All of the `run` commands are expected to be invoked
+  via command line.
 
-- deriving `Default, Serialize, Deserialize` on the configuration struct
-- decorating the service struct with `#[conf(<struct_name>)]`.
+#### Command execution mode
 
-Configuration is deserialized on start from `~/.local/share/<crate_name>/<crate_name>.json` and serialized to disk with default values if missing.
+The interface provides the mode the command is executed in as a parameter. The implementation should cover all execution
+modes (`Server`, `Command`) but is not required to support all of them.
 
-## CLI
+- `Server`
 
-One can extend the default provided CLI by
+  When command is executed by a runtime running in a `Server` mode.
 
-- deriving `StructOpt` on the CLI struct
-- decorating the service struct with `#[cli(<struct_name>)]`
+  The implementation MUST emit the following events of the command execution lifecycle:
 
-Custom CLI arguments will be injected to the main CLI struct as can be seen here: https://github.com/golemfactory/ya-service-sdk/blob/main/derive/src/lib.rs#L71
+    - command started
+    - command output (if any)
+    - command error output (if any)
+    - command stopped
 
-## ServiceMode
+  Events above can be published via an `emmiter` property, a part of the context object passed to each function of the
+  main interface.
 
-Code & comments: https://github.com/golemfactory/ya-service-sdk/blob/main/ya-service-sdk/src/runner.rs#L89-L99
+- `Command`
 
-By default, services start in `ServiceMode::Server` mode which enforces the use of Runtime API and a blocking implementation of `Service::start`. It's possible to change the mode by setting `const MODE: ServiceMode = ServiceMode::Command;` in `impl Service for <service_struct>`
+  The `run` command was invoked via command line.
 
-## Events 
+### Complementary functions
 
-Event `emitter` is a property of the `Context` param of each function of the Service trait. Currently it's possible to publish 4 kinds of events when running in `ServiceMode::Server`:
+In addition to the lifecycle and execution logic, runtimes can implement 2 additional functions to customize their
+behaviour:
 
-- command started
-- command stopped
-- command stdout
-- command stderr
+- test
 
-All events above are processed and buffered by the ExeUnit Supervisor. `Started` and `Stopped` events **MUST** be emitted when implementing `Service::run_command` (`RUN` in ExeScript dictionary).
+  Perform a self-test. Always executed during Provider Agent startup - i.e. during local yagna provider initialization,
+  external to the negotiation phase and computation.
+
+  Implementation must allow execution at any time.
+
+  Example: the VM runtime (`ya-runtime-vm`) spawns a Virtual Machine with a minimal test image attached, to verify that
+  KVM is properly configured on provider's operating system and all bundled components are available in the expected
+  location on disk.
+
+
+- offer
+
+  Inject custom properties and / or constraints to an Offer, published by the Provider Agent on the marketplace. `offer`
+  is executed by the Provider Agent while publishing new offers on the market, also during agent's initialization phase.
+
+  Implementation must allow execution at any time.
+
+### Events
+
+Future versions of `ya-runtime-sdk` may cover following additional events:
+
+- indication of runtime state change with a descriptor JSON object
+- custom usage counters for billing purposes
+- TBD
+
+## Implementation
+
+Runtimes can be implemented by performing the following steps:
+
+    - `#[derive(Default, RuntimeDef)]` on a runtime struct
+    - implement the `Runtime` trait for the struct
+    - use the `ya_runtime_sdk::run` method to start the runtime
+
+### Context
+
+Each of the `Runtime` trait functions is parameterized with a mutable reference to the runtime object, and a runtime
+execution context object.
+
+The `Context` struct exposes the following properties:
+
+- `cli`
+
+  Command line arguments provided to the binary
+
+- `conf`
+
+  Deserialized runtime configuration (can be modified)
+
+- `conf_path`
+
+  Path to the configuration file on the local filesystem
+
+- `emitter`
+
+  Runtime event emitter
+
+`Context` also exposes functions for configuration (de)serialization:
+
+- `read_config`
+
+  Read configuration from the specified path
+
+- `write_config`
+
+  Write configuration to the specified path
+
+### Configuration
+
+`ya-runtime-sdk` automatically deserializes configuration from JSON (default) / YAML / TOML files and provides means to
+serialize and persist modified configuration to disk. Runtime configuration is customizable via `#[config(ConfStruct)]`
+attribute of the `ServiceDef` derive macro and available as a property of the execution `Context`.
+
+On start, the configuration is loaded from a file located at `~/.local/share/<crate_name>/<crate_name>.<format>` and
+serialized to disk with default values when missing.
+
+## Debugging
+
+Runtimes running in `Server` execution mode can be interacted and debugged with
+the [ya-runtime-dbg](https://github.com/golemfactory/ya-runtime-dbg) tool. See the README file in the linked repository
+for more details.

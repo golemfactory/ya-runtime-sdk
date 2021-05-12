@@ -1,5 +1,5 @@
 [package]
-name = "ya-service-sdk"
+name = "ya-runtime-sdk"
 version = "0.1.0"
 authors = ["Golem Factory <contact@golem.network>"]
 edition = "2018"
@@ -8,7 +8,7 @@ license = "GPL-3.0"
 
 [features]
 default = []
-macros = ["ya-service-sdk-derive"]
+macros = ["ya-runtime-sdk-derive"]
 
 [dependencies.ya-runtime-api]
 version = "0.1"
@@ -16,7 +16,7 @@ features = ["codec"]
 git = "https://github.com/golemfactory/yagna.git"
 
 [dependencies]
-ya-service-sdk-derive = { version = "0.1", path = "../ya-service-sdk-derive", optional = true }
+ya-runtime-sdk-derive = { version = "0.1", path = "../ya-runtime-sdk-derive", optional = true }
 
 anyhow = "1.0"
 directories = "3.0"

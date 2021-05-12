@@ -1,8 +1,8 @@
 extern crate proc_macro;
 use std::collections::HashSet;
 
-#[proc_macro_derive(ServiceDef, attributes(cli, conf))]
-pub fn derive_service_def(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
+#[proc_macro_derive(RuntimeDef, attributes(cli, conf))]
+pub fn derive_runtime_def(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut parsed = syn::parse_macro_input!(stream as syn::Item);
     match &mut parsed {
         syn::Item::Struct(item) => impl_mod_struct(item),
@@ -16,9 +16,9 @@ pub fn derive_service_def(stream: proc_macro::TokenStream) -> proc_macro::TokenS
 
 fn impl_mod_struct(item: &syn::ItemStruct) -> proc_macro2::TokenStream {
     let attrs = parse_attributes(&item.attrs);
-    let service = item.ident.clone();
+    let runtime = item.ident.clone();
     let generics = item.generics.clone();
-    impl_mod(attrs, service, generics)
+    impl_mod(attrs, runtime, generics)
 }
 
 fn impl_mod(
@@ -37,7 +37,7 @@ fn impl_mod(
             DefParam::Cli(ident) => {
                 impl_cli = quote::quote!(
                     #[structopt(flatten)]
-                    pub service: super::#ident,
+                    pub runtime: super::#ident,
                 );
             }
             DefParam::Conf(ident) => {
@@ -53,7 +53,7 @@ fn impl_mod(
     quote::quote!(
 
         #[doc(hidden)]
-        pub mod ya_service_sdk_impl {
+        pub mod ya_runtime_sdk_impl {
             #[derive(structopt::StructOpt)]
             #[structopt(setting = structopt::clap::AppSettings::ColoredHelp)]
             #[structopt(setting = structopt::clap::AppSettings::DeriveDisplayOrder)]
@@ -72,15 +72,15 @@ fn impl_mod(
 
                 /// Command to execute
                 #[structopt(subcommand)]
-                pub command: ::ya_service_sdk::cli::Command,
+                pub command: ::ya_runtime_sdk::cli::Command,
             }
 
-            impl ::ya_service_sdk::cli::CommandCli for Cli {
+            impl ::ya_runtime_sdk::cli::CommandCli for Cli {
                 fn workdir(&self) -> Option<std::path::PathBuf> {
                     self.workdir.clone()
                 }
 
-                fn command(&self) -> &::ya_service_sdk::cli::Command {
+                fn command(&self) -> &::ya_runtime_sdk::cli::Command {
                     &self.command
                 }
             }
@@ -88,12 +88,12 @@ fn impl_mod(
             #impl_conf
         }
 
-        impl #impl_generics ::ya_service_sdk::ServiceDef for #name #ty_generics #where_clause {
+        impl #impl_generics ::ya_runtime_sdk::RuntimeDef for #name #ty_generics #where_clause {
             const NAME: &'static str = env!("CARGO_PKG_NAME");
             const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-            type Cli = ya_service_sdk_impl::Cli;
-            type Conf = ya_service_sdk_impl::Conf;
+            type Cli = ya_runtime_sdk_impl::Cli;
+            type Conf = ya_runtime_sdk_impl::Conf;
         }
     )
 }

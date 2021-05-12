@@ -1,41 +1,41 @@
 use crate::cli::{Command, CommandCli};
+use crate::runtime::{Context, Runtime};
 use crate::server::Server;
-use crate::service::{Context, Service};
 use std::io;
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 use ya_runtime_api::server::proto::{output::Type, request::RunProcess, Output};
 
-/// Starts the service
-pub async fn run<Svc: Service + 'static>() -> anyhow::Result<()> {
-    let mut ctx = Context::<Svc>::try_new()?;
+/// Starts the runtime
+pub async fn run<R: Runtime + 'static>() -> anyhow::Result<()> {
+    let mut ctx = Context::<R>::try_new()?;
 
     match ctx.cli.command().clone() {
         Command::Deploy { args: _ } => {
-            let mut service = Svc::default();
-            let deployment = service.deploy(&mut ctx).await?;
+            let mut runtime = R::default();
+            let deployment = runtime.deploy(&mut ctx).await?;
             output(deployment).await?;
         }
-        Command::Start { args: _ } => match Svc::MODE {
-            ServiceMode::Command => {
-                let mut service = Svc::default();
-                let started = service.start(&mut ctx).await?;
+        Command::Start { args: _ } => match R::MODE {
+            RuntimeMode::Command => {
+                let mut runtime = R::default();
+                let started = runtime.start(&mut ctx).await?;
                 output(started).await?;
             }
-            ServiceMode::Server => {
+            RuntimeMode::Server => {
                 // `run_async` accepts `Fn`, thus outer variable capturing is not possible
                 // FIXME: refactor `Fn` to `FnMut` in Runtime API
                 ya_runtime_api::server::run_async(|emitter| async move {
-                    let mut service = Svc::default();
-                    let mut ctx = Context::<Svc>::try_new().unwrap();
+                    let mut runtime = R::default();
+                    let mut ctx = Context::<R>::try_new().unwrap();
 
                     let start = {
                         ctx.set_emitter(Box::new(emitter));
-                        service.start(&mut ctx)
+                        runtime.start(&mut ctx)
                     };
-                    start.await.expect("Failed to start the service");
+                    start.await.expect("Failed to start the runtime");
 
-                    Server::new(service, ctx)
+                    Server::new(runtime, ctx)
                 })
                 .await;
             }
@@ -56,21 +56,21 @@ pub async fn run<Svc: Service + 'static>() -> anyhow::Result<()> {
                 stderr: capture,
             };
 
-            let mut service = Svc::default();
-            let pid = service
-                .run_command(command, ServiceMode::Command, &mut ctx)
+            let mut runtime = R::default();
+            let pid = runtime
+                .run_command(command, RuntimeMode::Command, &mut ctx)
                 .await?;
 
             output(serde_json::json!(pid)).await?;
         }
         Command::OfferTemplate { args: _ } => {
-            let mut service = Svc::default();
-            let template = service.offer(&mut ctx).await?;
+            let mut runtime = R::default();
+            let template = runtime.offer(&mut ctx).await?;
             output(template).await?;
         }
         Command::Test { args: _ } => {
-            let mut service = Svc::default();
-            service.test(&mut ctx).await?
+            let mut runtime = R::default();
+            runtime.test(&mut ctx).await?
         }
     }
 
@@ -86,15 +86,15 @@ pub fn exe_dir() -> io::Result<PathBuf> {
         .to_path_buf())
 }
 
-/// Defines the mode of execution for commands within the service.
+/// Defines the mode of execution for commands within the runtime.
 #[derive(Clone, Copy, Debug)]
-pub enum ServiceMode {
+pub enum RuntimeMode {
     /// Server (blocking) mode
     /// Uses Runtime API to communicate with the ExeUnit Supervisor.
     /// `Command::Deploy` remains a one-shot command.
     Server,
     /// One-shot execution mode
-    /// Each command is a separate invocation of the service binary.
+    /// Each command is a separate invocation of the runtime binary.
     Command,
 }
 

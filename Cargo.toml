@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "ya-service-sdk-derive",
-    "ya-service-sdk",
-    "examples/example-service"
+    "ya-runtime-sdk-derive",
+    "ya-runtime-sdk",
+    "examples/example-runtime"
 ]

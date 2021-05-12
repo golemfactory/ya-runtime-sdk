@@ -1,4 +1,4 @@
-use crate::{Context, Service, ServiceDef, ServiceMode};
+use crate::{Context, Runtime, RuntimeDef, RuntimeMode};
 use futures::{FutureExt, TryFutureExt};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -6,30 +6,30 @@ use ya_runtime_api::server::{
     AsyncResponse, KillProcess, RunProcess, RunProcessResp, RuntimeService,
 };
 
-pub struct Server<Svc: Service> {
-    pub(crate) service: Rc<RefCell<Svc>>,
-    pub(crate) ctx: Rc<RefCell<Context<Svc>>>,
+pub struct Server<R: Runtime> {
+    pub(crate) runtime: Rc<RefCell<R>>,
+    pub(crate) ctx: Rc<RefCell<Context<R>>>,
 }
 
-impl<Svc: Service> Server<Svc> {
-    pub fn new(service: Svc, ctx: Context<Svc>) -> Self {
+impl<R: Runtime> Server<R> {
+    pub fn new(runtime: R, ctx: Context<R>) -> Self {
         Self {
-            service: Rc::new(RefCell::new(service)),
+            runtime: Rc::new(RefCell::new(runtime)),
             ctx: Rc::new(RefCell::new(ctx)),
         }
     }
 }
 
-impl<Svc: Service> RuntimeService for Server<Svc> {
+impl<R: Runtime> RuntimeService for Server<R> {
     fn hello(&self, _version: &str) -> AsyncResponse<'_, String> {
-        async { Ok(<Svc as ServiceDef>::VERSION.to_owned()) }.boxed_local()
+        async { Ok(<R as RuntimeDef>::VERSION.to_owned()) }.boxed_local()
     }
 
     fn run_process(&self, run: RunProcess) -> AsyncResponse<'_, RunProcessResp> {
-        let mut service = self.service.borrow_mut();
+        let mut runtime = self.runtime.borrow_mut();
         let mut ctx = self.ctx.borrow_mut();
-        service
-            .run_command(run, ServiceMode::Server, &mut ctx)
+        runtime
+            .run_command(run, RuntimeMode::Server, &mut ctx)
             .then(|result| async move {
                 match result {
                     Ok(pid) => Ok(RunProcessResp { pid }),
@@ -40,17 +40,17 @@ impl<Svc: Service> RuntimeService for Server<Svc> {
     }
 
     fn kill_process(&self, kill: KillProcess) -> AsyncResponse<'_, ()> {
-        let mut service = self.service.borrow_mut();
+        let mut runtime = self.runtime.borrow_mut();
         let mut ctx = self.ctx.borrow_mut();
-        service
+        runtime
             .kill_command(kill, &mut ctx)
             .map_err(Into::into)
             .boxed_local()
     }
 
     fn shutdown(&self) -> AsyncResponse<'_, ()> {
-        let mut service = self.service.borrow_mut();
+        let mut runtime = self.runtime.borrow_mut();
         let mut ctx = self.ctx.borrow_mut();
-        service.stop(&mut ctx).map_err(Into::into).boxed_local()
+        runtime.stop(&mut ctx).map_err(Into::into).boxed_local()
     }
 }
