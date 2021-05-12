@@ -206,9 +206,6 @@ impl EventEmitter {
 }
 
 impl EventEmitter {
-    // Functions below return futures
-    // in preparation for changes in the Runtime API
-
     /// Emit a command started event
     pub fn command_started<'a>(&self, process_id: ProcessId) -> LocalBoxFuture<'a, ()> {
         self.emit(ProcessStatus {
@@ -267,8 +264,7 @@ impl EventEmitter {
 
     /// Emit an event
     pub fn emit<'a>(&self, status: ProcessStatus) -> LocalBoxFuture<'a, ()> {
-        self.inner.on_process_status(status);
-        async move { () }.boxed_local()
+        self.inner.on_process_status(status).boxed_local()
     }
 }
 
