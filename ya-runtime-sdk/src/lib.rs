@@ -1,9 +1,9 @@
 pub mod cli;
 pub mod error;
 pub mod runner;
+mod runtime;
 pub mod serialize;
 mod server;
-mod service;
 
 pub use ya_runtime_api as runtime_api;
 pub use ya_runtime_api::server::{
@@ -11,17 +11,17 @@ pub use ya_runtime_api::server::{
 };
 
 pub use cli::Command;
-pub use runner::{run, ServiceMode};
+pub use runner::{run, RuntimeMode};
+pub use runtime::*;
 pub use server::Server;
-pub use service::*;
 
 #[cfg(feature = "macros")]
 #[allow(unused_imports)]
 #[macro_use]
-extern crate ya_service_sdk_derive;
+extern crate ya_runtime_sdk_derive;
 #[cfg(feature = "macros")]
 #[doc(hidden)]
-pub use ya_service_sdk_derive::*;
+pub use ya_runtime_sdk_derive::*;
 
 #[cfg(feature = "macros")]
 #[macro_export]
@@ -29,7 +29,7 @@ macro_rules! main {
     ($ty:ty) => {
         #[tokio::main]
         async fn main() -> anyhow::Result<()> {
-            crate::run::<$ty>().await
+            ya_runtime_sdk::run::<$ty>().await
         }
     };
 }

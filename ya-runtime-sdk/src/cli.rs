@@ -9,11 +9,11 @@ pub trait CommandCli: StructOpt {
 #[derive(Clone, Debug, StructOpt)]
 #[structopt(setting = clap::AppSettings::DeriveDisplayOrder)]
 pub enum Command {
-    /// Deploy the service
+    /// Deploy the runtime
     Deploy { args: Vec<String> },
-    /// Start the service
+    /// Start the runtime
     Start { args: Vec<String> },
-    /// Run a service command
+    /// Run a runtime command
     Run { args: Vec<String> },
     /// Output a market offer template JSON
     OfferTemplate { args: Vec<String> },

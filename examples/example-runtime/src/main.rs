@@ -1,7 +1,7 @@
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
-use ya_service_sdk::*;
+use ya_runtime_sdk::*;
 
 #[derive(StructOpt)]
 #[structopt(rename_all = "kebab-case")]
@@ -10,7 +10,7 @@ pub struct ExampleCli {
     // FIXME: currently, the ExeUnit Supervisor always passes this argument to a binary
     #[allow(unused)]
     task_package: Option<std::path::PathBuf>,
-    /// Example service param
+    /// Example runtime param
     #[allow(unused)]
     #[structopt(long, default_value = "1")]
     param: usize,
@@ -21,13 +21,13 @@ pub struct ExampleConf {
     value: usize,
 }
 
-#[derive(Default, ServiceDef)]
+#[derive(Default, RuntimeDef)]
 #[cli(ExampleCli)]
 #[conf(ExampleConf)]
-pub struct ExampleService;
+pub struct ExampleRuntime;
 
-impl Service for ExampleService {
-    const MODE: ServiceMode = ServiceMode::Command;
+impl Runtime for ExampleRuntime {
+    const MODE: RuntimeMode = RuntimeMode::Command;
 
     fn deploy<'a>(&mut self, _: &mut Context<Self>) -> OutputResponse<'a> {
         async move { Ok("deploy".into()) }.boxed_local()
@@ -45,7 +45,7 @@ impl Service for ExampleService {
     fn run_command<'a>(
         &mut self,
         command: RunProcess,
-        mode: ServiceMode,
+        mode: RuntimeMode,
         _: &mut Context<Self>,
     ) -> ProcessIdResponse<'a> {
         println!("start_command: {:?} in {:?} mode", command, mode);
@@ -57,7 +57,7 @@ impl Service for ExampleService {
 //
 // #[tokio::main]
 // async fn main() -> anyhow::Result<()> {
-//     service_sdk::::run::<ExampleService>().await
+//     ya_runtime_sdk::::run::<ExampleRuntime>().await
 // }
 
-main!(ExampleService);
+main!(ExampleRuntime);

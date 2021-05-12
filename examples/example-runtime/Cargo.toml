@@ -1,12 +1,12 @@
 [package]
-name = "example-service"
+name = "example-runtime"
 version = "1.2.3"
 authors = ["Golem Factory <contact@golem.network>"]
 edition = "2018"
 license = "GPL-3.0"
 
 [dependencies]
-ya-service-sdk = { version = "0.1", path = "../../ya-service-sdk", features = ["macros"] }
+ya-runtime-sdk = { version = "0.1", path = "../../ya-runtime-sdk", features = ["macros"] }
 
 anyhow = "1.0"
 futures = "0.3"

@@ -1,6 +1,6 @@
 use crate::cli::CommandCli;
 use crate::error::Error;
-use crate::runner::ServiceMode;
+use crate::runner::RuntimeMode;
 use crate::{KillProcess, ProcessStatus, RunProcess, RuntimeEvent};
 use futures::future::LocalBoxFuture;
 use futures::FutureExt;
@@ -15,27 +15,27 @@ pub type OutputResponse<'a> = LocalBoxFuture<'a, Result<serde_json::Value, Error
 pub type ProcessIdResponse<'a> = LocalBoxFuture<'a, Result<ProcessId, Error>>;
 
 /// Command handler interface.
-pub trait Service: ServiceDef + Default {
-    const MODE: ServiceMode = ServiceMode::Server;
+pub trait Runtime: RuntimeDef + Default {
+    const MODE: RuntimeMode = RuntimeMode::Server;
 
-    /// Deploy and configure the service
+    /// Deploy and configure the runtime
     fn deploy<'a>(&mut self, ctx: &mut Context<Self>) -> OutputResponse<'a>;
 
-    /// Start the service
+    /// Start the runtime
     fn start<'a>(&mut self, ctx: &mut Context<Self>) -> OutputResponse<'a>;
 
-    /// Stop the service
+    /// Stop the runtime
     fn stop<'a>(&mut self, ctx: &mut Context<Self>) -> EmptyResponse<'a>;
 
-    /// Start a service command
+    /// Start a runtime command
     fn run_command<'a>(
         &mut self,
         command: RunProcess,
-        mode: ServiceMode,
+        mode: RuntimeMode,
         ctx: &mut Context<Self>,
     ) -> ProcessIdResponse<'a>;
 
-    /// Stop service command execution
+    /// Stop runtime command execution
     fn kill_command<'a>(
         &mut self,
         _kill: KillProcess,
@@ -55,9 +55,9 @@ pub trait Service: ServiceDef + Default {
     }
 }
 
-/// Service definition trait.
-/// Auto-generated via `#[derive(ServiceDef)]`
-pub trait ServiceDef {
+/// Runtime definition trait.
+/// Auto-generated via `#[derive(RuntimeDef)]`
+pub trait RuntimeDef {
     const NAME: &'static str;
     const VERSION: &'static str;
 
@@ -65,25 +65,25 @@ pub trait ServiceDef {
     type Conf: Default + Serialize + for<'de> Deserialize<'de>;
 }
 
-/// Service execution context
-pub struct Context<Svc: Service + ?Sized> {
+/// Runtime execution context
+pub struct Context<R: Runtime + ?Sized> {
     /// Command line parameters
-    pub cli: <Svc as ServiceDef>::Cli,
+    pub cli: <R as RuntimeDef>::Cli,
     /// Configuration read from the configuration file
-    pub conf: <Svc as ServiceDef>::Conf,
+    pub conf: <R as RuntimeDef>::Conf,
     /// Configuration file path
     pub conf_path: PathBuf,
     /// Event emitter, available when
-    /// `Service::MODE == ServiceMode::Server`
+    /// `Runtime::MODE == RuntimeMode::Server`
     /// and
     /// `command != Command::Deploy`
     pub emitter: Option<EventEmitter>,
 }
 
-impl<Svc: Service + ?Sized> Clone for Context<Svc>
+impl<R: Runtime + ?Sized> Clone for Context<R>
 where
-    <Svc as ServiceDef>::Cli: Clone,
-    <Svc as ServiceDef>::Conf: Clone,
+    <R as RuntimeDef>::Cli: Clone,
+    <R as RuntimeDef>::Conf: Clone,
 {
     fn clone(&self) -> Self {
         Context {
@@ -95,14 +95,14 @@ where
     }
 }
 
-impl<Svc: Service + ?Sized> Context<Svc> {
+impl<R: Runtime + ?Sized> Context<R> {
     const CONF_EXTENSIONS: [&'static str; 3] = ["toml", "yaml", "json"];
 
     pub fn try_new() -> anyhow::Result<Self> {
-        let app = <Svc as ServiceDef>::Cli::clap()
-            .name(Svc::NAME)
-            .version(Svc::VERSION);
-        let cli = <Svc as ServiceDef>::Cli::from_clap(&app.get_matches());
+        let app = <R as RuntimeDef>::Cli::clap()
+            .name(R::NAME)
+            .version(R::VERSION);
+        let cli = <R as RuntimeDef>::Cli::from_clap(&app.get_matches());
 
         let conf_path = Self::config_path()?;
         let conf = if conf_path.exists() {
@@ -121,7 +121,7 @@ impl<Svc: Service + ?Sized> Context<Svc> {
         })
     }
 
-    pub fn read_config<P: AsRef<Path>>(path: P) -> anyhow::Result<<Svc as ServiceDef>::Conf> {
+    pub fn read_config<P: AsRef<Path>>(path: P) -> anyhow::Result<<R as RuntimeDef>::Conf> {
         use anyhow::Context;
 
         let path = path.as_ref();
@@ -129,7 +129,7 @@ impl<Svc: Service + ?Sized> Context<Svc> {
         let err = || format!("Unable to read the configuration file: {}", path.display());
 
         let contents = std::fs::read_to_string(path).with_context(err)?;
-        let conf: <Svc as ServiceDef>::Conf = match extension.as_str() {
+        let conf: <R as RuntimeDef>::Conf = match extension.as_str() {
             "toml" => toml::de::from_str(&contents).with_context(err)?,
             "yaml" => serde_yaml::from_str(&contents).with_context(err)?,
             "json" => serde_json::from_str(&contents).with_context(err)?,
@@ -140,7 +140,7 @@ impl<Svc: Service + ?Sized> Context<Svc> {
     }
 
     pub fn write_config<P: AsRef<Path>>(
-        conf: &<Svc as ServiceDef>::Conf,
+        conf: &<R as RuntimeDef>::Conf,
         path: P,
     ) -> anyhow::Result<()> {
         use anyhow::Context;
@@ -170,12 +170,12 @@ impl<Svc: Service + ?Sized> Context<Svc> {
     pub fn config_path() -> anyhow::Result<PathBuf> {
         const ORGANIZATION: &'static str = "GolemFactory";
 
-        let dir = directories::ProjectDirs::from("", ORGANIZATION, Svc::NAME)
+        let dir = directories::ProjectDirs::from("", ORGANIZATION, R::NAME)
             .map(|dirs| dirs.data_dir().into())
-            .unwrap_or_else(|| PathBuf::from(ORGANIZATION).join(Svc::NAME));
+            .unwrap_or_else(|| PathBuf::from(ORGANIZATION).join(R::NAME));
         let candidates = Self::CONF_EXTENSIONS
             .iter()
-            .map(|ext| dir.join(format!("{}.{}", Svc::NAME, ext)))
+            .map(|ext| dir.join(format!("{}.{}", R::NAME, ext)))
             .collect::<Vec<_>>();
         let conf_path = candidates
             .iter()
