@@ -2,7 +2,7 @@ use crate::cli::CommandCli;
 use crate::error::Error;
 use crate::runner::RuntimeMode;
 use crate::{KillProcess, ProcessStatus, RunProcess, RuntimeEvent};
-use futures::future::LocalBoxFuture;
+use futures::future::{BoxFuture, LocalBoxFuture};
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -207,7 +207,7 @@ impl EventEmitter {
 
 impl EventEmitter {
     /// Emit a command started event
-    pub fn command_started<'a>(&self, process_id: ProcessId) -> LocalBoxFuture<'a, ()> {
+    pub fn command_started<'a>(&self, process_id: ProcessId) -> BoxFuture<'a, ()> {
         self.emit(ProcessStatus {
             pid: process_id,
             running: true,
@@ -222,7 +222,7 @@ impl EventEmitter {
         &self,
         process_id: ProcessId,
         return_code: i32,
-    ) -> LocalBoxFuture<'a, ()> {
+    ) -> BoxFuture<'a, ()> {
         self.emit(ProcessStatus {
             pid: process_id,
             running: false,
@@ -233,11 +233,7 @@ impl EventEmitter {
     }
 
     /// Emit a command output event (stdout)
-    pub fn command_stdout<'a>(
-        &self,
-        process_id: ProcessId,
-        stdout: Vec<u8>,
-    ) -> LocalBoxFuture<'a, ()> {
+    pub fn command_stdout<'a>(&self, process_id: ProcessId, stdout: Vec<u8>) -> BoxFuture<'a, ()> {
         self.emit(ProcessStatus {
             pid: process_id,
             running: true,
@@ -248,11 +244,7 @@ impl EventEmitter {
     }
 
     /// Emit a command output event (stderr)
-    pub fn command_stderr<'a>(
-        &self,
-        process_id: ProcessId,
-        stderr: Vec<u8>,
-    ) -> LocalBoxFuture<'a, ()> {
+    pub fn command_stderr<'a>(&self, process_id: ProcessId, stderr: Vec<u8>) -> BoxFuture<'a, ()> {
         self.emit(ProcessStatus {
             pid: process_id,
             running: true,
@@ -263,8 +255,8 @@ impl EventEmitter {
     }
 
     /// Emit an event
-    pub fn emit<'a>(&self, status: ProcessStatus) -> LocalBoxFuture<'a, ()> {
-        self.inner.on_process_status(status).boxed_local()
+    pub fn emit<'a>(&self, status: ProcessStatus) -> BoxFuture<'a, ()> {
+        self.inner.on_process_status(status).boxed()
     }
 }
 
