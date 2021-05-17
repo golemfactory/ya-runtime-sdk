@@ -10,6 +10,23 @@ The crate provides a default implementation and customizable wrappers in the fol
 - runtime state management
 - billing reports
 
+---
+
+Table of contents
+- [Runtime overview](#runtime-overview)
+  - [Runtime orchestration](#runtime-orchestration)
+    - [Runtime execution mode](#runtime-execution-mode)
+    - [Command execution mode](#command-execution-mode)
+  - [Complementary functions](#complementary-functions)
+  - [Events](#events)
+- [Implementation](#implementation)
+  - [Context](#context)
+  - [Configuration](#configuration)
+- [Debugging](#debugging)
+- [Deploying](#deploying)
+
+---
+
 ## Runtime overview
 
 Runtimes are responsible for executing provisions of the Agreement between a Provider and a Requestor. Runtimes are
@@ -133,13 +150,15 @@ Future versions of `ya-runtime-sdk` may cover following additional events:
 - custom usage counters for billing purposes
 - TBD
 
+---
+
 ## Implementation
 
 Runtimes can be implemented by performing the following steps:
 
-    - `#[derive(Default, RuntimeDef)]` on a runtime struct
-    - implement the `Runtime` trait for the struct
-    - use the `ya_runtime_sdk::run` method to start the runtime
+  - `#[derive(Default, RuntimeDef)]` on a runtime struct
+  - implement the `Runtime` trait for the struct
+  - use the `ya_runtime_sdk::run` method to start the runtime
 
 ### Context
 
@@ -188,3 +207,38 @@ serialized to disk with default values when missing.
 Runtimes running in `Server` execution mode can be interacted and debugged with
 the [ya-runtime-dbg](https://github.com/golemfactory/ya-runtime-dbg) tool. See the README file in the linked repository
 for more details.
+
+## Deploying
+
+**Note:** these instructions will soon become obsolete.
+
+1. Build exe unit from the `mf/self-contained` branch (https://github.com/golemfactory/yagna/pull/1315)
+
+    - copy the built binary to the plugins directory
+    
+2. Create a `ya-runtime-<runtime_name>.json` descriptor file in the plugins directory.
+
+```json
+  [
+    {
+      "name": "<wrapper_name>",
+      "version": "0.1.0",
+      "supervisor-path": "exe-unit",
+      "runtime-path": "<wrapper_dir>/<wrapper_bin>",
+      "description": "Service ",
+      "extra-args": ["--runtime-managed-image"]
+    }
+  ]
+```
+
+3. Edit `~/.local/share/ya-provider/presets.json`:
+    
+    - create a `presets` entry for `exeunit-name: "service_wrapper"` (e.g. copy an existing preset)
+    - include the preset name in `active` array
+
+4. Start `golemsp` or `ya-provider`.
+
+The **plugins directory** is by default located at:
+
+  - golemsp: `~/.local/lib/yagna/plugins`
+  - ya-provider: `/usr/lib/yagna/plugins/`
