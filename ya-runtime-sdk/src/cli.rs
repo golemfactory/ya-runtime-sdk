@@ -6,7 +6,7 @@ pub trait CommandCli: StructOpt {
     fn command(&self) -> &Command;
 }
 
-#[derive(Clone, Debug, StructOpt)]
+#[derive(Clone, Debug, Eq, PartialEq, StructOpt)]
 #[structopt(setting = clap::AppSettings::DeriveDisplayOrder)]
 pub enum Command {
     /// Deploy the runtime

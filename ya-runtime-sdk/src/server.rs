@@ -1,10 +1,13 @@
-use crate::{Context, Runtime, RuntimeDef, RuntimeMode};
-use futures::{FutureExt, TryFutureExt};
 use std::cell::RefCell;
 use std::rc::Rc;
+
+use futures::{FutureExt, TryFutureExt};
 use ya_runtime_api::server::{
     AsyncResponse, KillProcess, RunProcess, RunProcessResp, RuntimeService,
 };
+
+use crate::runtime::RuntimeMode;
+use crate::{Context, Runtime, RuntimeDef};
 
 pub struct Server<R: Runtime> {
     pub(crate) runtime: Rc<RefCell<R>>,

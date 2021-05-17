@@ -53,11 +53,7 @@ impl Runtime for ExampleRuntime {
     }
 }
 
-// Macro expansion is equivalent to:
-//
-// #[tokio::main]
-// async fn main() -> anyhow::Result<()> {
-//     ya_runtime_sdk::::run::<ExampleRuntime>().await
-// }
-
-main!(ExampleRuntime);
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    ya_runtime_sdk::run::<ExampleRuntime>().await
+}
