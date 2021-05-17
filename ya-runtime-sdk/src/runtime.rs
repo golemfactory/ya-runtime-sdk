@@ -1,20 +1,23 @@
-use crate::cli::CommandCli;
-use crate::error::Error;
-use crate::runner::RuntimeMode;
-use crate::{KillProcess, ProcessStatus, RunProcess, RuntimeEvent};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 use futures::future::{BoxFuture, LocalBoxFuture};
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use structopt::StructOpt;
+
+use crate::cli::CommandCli;
+use crate::env::{DefaultEnv, Env};
+use crate::error::Error;
+use crate::runtime_api::server::RuntimeEvent;
+use crate::{KillProcess, ProcessStatus, RunProcess};
 
 pub type ProcessId = u64;
 pub type EmptyResponse<'a> = LocalBoxFuture<'a, Result<(), Error>>;
 pub type OutputResponse<'a> = LocalBoxFuture<'a, Result<serde_json::Value, Error>>;
 pub type ProcessIdResponse<'a> = LocalBoxFuture<'a, Result<ProcessId, Error>>;
 
-/// Command handler interface.
+/// Command handling interface for runtimes
 pub trait Runtime: RuntimeDef + Default {
     const MODE: RuntimeMode = RuntimeMode::Server;
 
@@ -53,6 +56,18 @@ pub trait Runtime: RuntimeDef + Default {
     fn test<'a>(&mut self, _ctx: &mut Context<Self>) -> EmptyResponse<'a> {
         async move { Ok(()) }.boxed_local()
     }
+}
+
+/// Defines the mode of execution for commands within the runtime.
+#[derive(Clone, Copy, Debug)]
+pub enum RuntimeMode {
+    /// Server (blocking) mode
+    /// Uses Runtime API to communicate with the ExeUnit Supervisor.
+    /// `Command::Deploy` remains a one-shot command.
+    Server,
+    /// One-shot execution mode
+    /// Each command is a separate invocation of the runtime binary.
+    Command,
 }
 
 /// Runtime definition trait.
@@ -98,13 +113,22 @@ where
 impl<R: Runtime + ?Sized> Context<R> {
     const CONF_EXTENSIONS: [&'static str; 4] = ["toml", "yaml", "yml", "json"];
 
+    /// Create a new instance with a default environment configuration
     pub fn try_new() -> anyhow::Result<Self> {
+        Self::try_with(DefaultEnv::default())
+    }
+
+    /// Create a new instance with provided environment configuration
+    pub fn try_with<E: Env>(env: E) -> anyhow::Result<Self> {
         let app = <R as RuntimeDef>::Cli::clap()
             .name(R::NAME)
             .version(R::VERSION);
-        let cli = <R as RuntimeDef>::Cli::from_clap(&app.get_matches());
 
-        let conf_path = Self::config_path()?;
+        let cli = <R as RuntimeDef>::Cli::from_clap(&app.get_matches_from(env.args()));
+
+        let conf_dir = env.data_directory(R::NAME)?;
+        let conf_path = Self::config_path(conf_dir)?;
+
         let conf = if conf_path.exists() {
             Self::read_config(&conf_path)?
         } else {
@@ -121,6 +145,7 @@ impl<R: Runtime + ?Sized> Context<R> {
         })
     }
 
+    /// Read configuration from file
     pub fn read_config<P: AsRef<Path>>(path: P) -> anyhow::Result<<R as RuntimeDef>::Conf> {
         use anyhow::Context;
 
@@ -139,6 +164,7 @@ impl<R: Runtime + ?Sized> Context<R> {
         Ok(conf)
     }
 
+    /// Write configuration to file
     pub fn write_config<P: AsRef<Path>>(
         conf: &<R as RuntimeDef>::Conf,
         path: P,
@@ -167,12 +193,8 @@ impl<R: Runtime + ?Sized> Context<R> {
         Ok(())
     }
 
-    pub fn config_path() -> anyhow::Result<PathBuf> {
-        const ORGANIZATION: &'static str = "GolemFactory";
-
-        let dir = directories::ProjectDirs::from("", ORGANIZATION, R::NAME)
-            .map(|dirs| dirs.data_dir().into())
-            .unwrap_or_else(|| PathBuf::from(ORGANIZATION).join(R::NAME));
+    fn config_path<P: AsRef<Path>>(dir: P) -> anyhow::Result<PathBuf> {
+        let dir = dir.as_ref();
         let candidates = Self::CONF_EXTENSIONS
             .iter()
             .map(|ext| dir.join(format!("{}.{}", R::NAME, ext)))
@@ -192,6 +214,7 @@ impl<R: Runtime + ?Sized> Context<R> {
     }
 }
 
+/// Runtime event emitter
 #[derive(Clone)]
 pub struct EventEmitter {
     inner: Arc<Box<dyn RuntimeEvent + Send + Sync>>,

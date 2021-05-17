@@ -16,9 +16,12 @@ features = ["codec"]
 git = "https://github.com/golemfactory/yagna.git"
 rev = "3d0bee5c12ce64bdb68f11c765f77eab762984ab"
 
-[dependencies]
-ya-runtime-sdk-derive = { version = "0.1", path = "../ya-runtime-sdk-derive", optional = true }
+[dependencies.ya-runtime-sdk-derive]
+version = "0.1"
+path = "../ya-runtime-sdk-derive"
+optional = true
 
+[dependencies]
 anyhow = "1.0"
 directories = "3.0"
 futures = "0.3"
@@ -28,3 +31,6 @@ serde_yaml = "0.8"
 structopt = "0.3"
 tokio = { version = "0.2", features = ["io-std", "io-util", "rt-core", "rt-threaded", "macros"] }
 toml = "0.5"
+
+[dev-dependencies]
+tempdir = "0.3"

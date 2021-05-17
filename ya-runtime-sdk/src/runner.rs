@@ -1,15 +1,20 @@
-use crate::cli::{Command, CommandCli};
-use crate::runtime::{Context, Runtime};
-use crate::server::Server;
-use std::io;
-use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 use ya_runtime_api::server::proto::{output::Type, request::RunProcess, Output};
 
+use crate::cli::{Command, CommandCli};
+use crate::env::{DefaultEnv, Env};
+use crate::runtime::{Context, Runtime, RuntimeMode};
+use crate::server::Server;
+
 /// Starts the runtime
 pub async fn run<R: Runtime + 'static>() -> anyhow::Result<()> {
+    run_with::<R, _>(DefaultEnv::default()).await
+}
+
+/// Starts the runtime using a custom environment configuration provider
+pub async fn run_with<R: Runtime + 'static, E: Env>(env: E) -> anyhow::Result<()> {
     let mut runtime = R::default();
-    let mut ctx = Context::<R>::try_new().unwrap();
+    let mut ctx = Context::<R>::try_with(env)?;
 
     match ctx.cli.command() {
         Command::Deploy { args: _ } => {
@@ -65,27 +70,6 @@ pub async fn run<R: Runtime + 'static>() -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-/// Returns the parent directory of this binary.
-#[allow(unused)]
-pub fn exe_dir() -> io::Result<PathBuf> {
-    Ok(std::env::current_exe()?
-        .parent()
-        .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?
-        .to_path_buf())
-}
-
-/// Defines the mode of execution for commands within the runtime.
-#[derive(Clone, Copy, Debug)]
-pub enum RuntimeMode {
-    /// Server (blocking) mode
-    /// Uses Runtime API to communicate with the ExeUnit Supervisor.
-    /// `Command::Deploy` remains a one-shot command.
-    Server,
-    /// One-shot execution mode
-    /// Each command is a separate invocation of the runtime binary.
-    Command,
 }
 
 async fn output(json: serde_json::Value) -> anyhow::Result<()> {
