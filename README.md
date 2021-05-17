@@ -156,9 +156,9 @@ Future versions of `ya-runtime-sdk` may cover following additional events:
 
 Runtimes can be implemented by performing the following steps:
 
-    - `#[derive(Default, RuntimeDef)]` on a runtime struct
-    - implement the `Runtime` trait for the struct
-    - use the `ya_runtime_sdk::run` method to start the runtime
+  - `#[derive(Default, RuntimeDef)]` on a runtime struct
+  - implement the `Runtime` trait for the struct
+  - use the `ya_runtime_sdk::run` method to start the runtime
 
 ### Context
 
@@ -212,26 +212,26 @@ for more details.
 
 **Note:** these instructions will soon become obsolete.
 
-1. Build exe unit from the mf/self-contained branch (https://github.com/golemfactory/yagna/pull/1315)
+1. Build exe unit from the `mf/self-contained` branch (https://github.com/golemfactory/yagna/pull/1315)
 
     - copy the built binary to the plugins directory
     
 2. Create a `ya-runtime-<runtime_name>.json` descriptor file in the plugins directory.
 
 ```json
-    [
-      {
-        "name": "<wrapper_name>",
-        "version": "0.1.0",
-        "supervisor-path": "exe-unit",
-        "runtime-path": "<wrapper_dir>/<wrapper_bin>",
-        "description": "Service ",
-        "extra-args": ["--runtime-managed-image"]
-      }
-    ]
+  [
+    {
+      "name": "<wrapper_name>",
+      "version": "0.1.0",
+      "supervisor-path": "exe-unit",
+      "runtime-path": "<wrapper_dir>/<wrapper_bin>",
+      "description": "Service ",
+      "extra-args": ["--runtime-managed-image"]
+    }
+  ]
 ```
 
-3. Edit ~/.local/share/ya-provider/presets.json:
+3. Edit `~/.local/share/ya-provider/presets.json`:
     
     - create a `presets` entry for `exeunit-name: "service_wrapper"` (e.g. copy an existing preset)
     - include the preset name in `active` array
