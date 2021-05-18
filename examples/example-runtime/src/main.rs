@@ -6,6 +6,30 @@ use std::sync::atomic::Ordering::Relaxed;
 use structopt::StructOpt;
 use ya_runtime_sdk::*;
 
+/// HOW TO DEPLOY ON LOCAL PROVIDER
+///
+/// 1. General path - follow instructions here:
+///    https://discord.com/channels/687954211702439971/834089279109202000/842696627391430656
+/// 2. Sample build & deploy on a local provider is just:
+///    
+///    cargo build
+///    cp ../target/debug/example-runtime ~/.local/lib/yagna/plugins/ya-runtime-ttt/ya-runtime-ttt
+///    (no need to restart provider)
+///
+///    (assuming that:
+///     * you are in ya-runtime-sdk/examples directory, 
+///     * you use `golemsp`
+///     * the name of your runtime is 'ttt'
+///     * in your `ya-runtime-ttt.json` file there is"runtime-path": "ya-runtime-ttt/ya-runtime-ttt",
+///    )
+/// 
+/// USAGE
+/// 
+/// 1. Make a demand with runtime = 'ttt' 
+/// 2. Any call to `ctx.run_command()` should succeed & return echo-like response
+///    (with additional turbogeth-like spam)
+
+
 #[derive(StructOpt)]
 #[structopt(rename_all = "kebab-case")]
 pub struct ExampleCli {
@@ -66,8 +90,15 @@ impl Runtime for ExampleRuntime {
             emitter.command_started(seq).await;
             // resolves the future returned by `run_command`
             let _ = tx.send(seq);
-
-            let stdout = format!("[{}] output for command: {:?}", seq, command)
+            
+            let erigon_mock_data = serialize::json::json!(
+                {
+                    "status": "running",
+                    "url": "www.some.where/erigon:7987",
+                    "secret": "THE SECRET AUTH"
+                }
+            );
+            let stdout = format!("[{}] output for command: {:?}. ERIGON: {}", seq, command, erigon_mock_data)
                 .as_bytes()
                 .to_vec();
 
