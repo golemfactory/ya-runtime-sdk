@@ -110,6 +110,7 @@ dependencies = [
  "anyhow",
  "futures",
  "serde",
+ "serde_json",
  "structopt",
  "tokio",
  "ya-runtime-sdk",

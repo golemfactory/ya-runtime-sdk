@@ -2,6 +2,7 @@ use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 use ya_runtime_sdk::*;
+use serde_json::Value;
 
 #[derive(StructOpt)]
 #[structopt(rename_all = "kebab-case")]
@@ -27,29 +28,54 @@ pub struct ExampleConf {
 pub struct ExampleRuntime;
 
 impl Runtime for ExampleRuntime {
-    const MODE: RuntimeMode = RuntimeMode::Command;
+    const MODE: RuntimeMode = RuntimeMode::Server;
 
     fn deploy<'a>(&mut self, _: &mut Context<Self>) -> OutputResponse<'a> {
-        async move { Ok("deploy".into()) }.boxed_local()
+        let data = r#"
+        {"startMode":"blocking","valid":{"Ok":""},"vols":[]}
+        "#;
+        let json_v: Value = serde_json::from_str(data).expect("Invalid JSON string");
+        async move { Ok(json_v) }.boxed_local()
     }
 
     fn start<'a>(&mut self, _: &mut Context<Self>) -> OutputResponse<'a> {
-        async move { Ok("start".into()) }.boxed_local()
+        async move {
+            // tokio::time::delay_for(std::time::Duration::from_secs(3600)).await;
+            Ok("start".into())
+        }.boxed_local()
     }
 
     fn stop<'a>(&mut self, _: &mut Context<Self>) -> EmptyResponse<'a> {
-        println!("stop");
         async move { Ok(()) }.boxed_local()
+    }
+    fn offer<'a>(&mut self, _ctx: &mut Context<Self>) -> OutputResponse<'a> {
+        let data = r#"
+            {
+                "constraints":"",
+                "properties":{}
+            }"#;
+        let json_v: Value = serde_json::from_str(data).expect("Invalid JSON string");
+        async move { Ok(json_v) }.boxed_local()
     }
 
     fn run_command<'a>(
         &mut self,
         command: RunProcess,
         mode: RuntimeMode,
-        _: &mut Context<Self>,
+        ctx: &mut Context<Self>,
     ) -> ProcessIdResponse<'a> {
-        println!("start_command: {:?} in {:?} mode", command, mode);
-        async move { Ok(0) }.boxed_local()
+        // println!("start_command: {:?} in {:?} mode", command, mode);
+        let emitter = ctx.emitter.clone().unwrap();
+        async move {
+            let seq = 0u64;
+            emitter.command_started(seq).await;
+            emitter
+                .command_stdout(seq, format!("response {}", seq).as_bytes().to_vec())
+                .await;
+            emitter.command_stopped(seq, 0).await;
+            Ok(seq)
+        }
+        .boxed_local()
     }
 }
 
