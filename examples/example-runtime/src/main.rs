@@ -1,19 +1,17 @@
+use futures::channel::oneshot;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering::Relaxed;
 use structopt::StructOpt;
+use ya_runtime_sdk::serialize::json;
 use ya_runtime_sdk::*;
 
 #[derive(StructOpt)]
 #[structopt(rename_all = "kebab-case")]
 pub struct ExampleCli {
-    /// Task package path (ignored in case of services)
-    // FIXME: currently, the ExeUnit Supervisor always passes this argument to a binary
     #[allow(unused)]
-    task_package: Option<std::path::PathBuf>,
-    /// Example runtime param
-    #[allow(unused)]
-    #[structopt(long, default_value = "1")]
-    param: usize,
+    example_path: Option<std::path::PathBuf>,
 }
 
 #[derive(Default, Deserialize, Serialize)]
@@ -24,32 +22,64 @@ pub struct ExampleConf {
 #[derive(Default, RuntimeDef)]
 #[cli(ExampleCli)]
 #[conf(ExampleConf)]
-pub struct ExampleRuntime;
+pub struct ExampleRuntime {
+    seq: AtomicU64,
+}
 
 impl Runtime for ExampleRuntime {
-    const MODE: RuntimeMode = RuntimeMode::Command;
-
     fn deploy<'a>(&mut self, _: &mut Context<Self>) -> OutputResponse<'a> {
-        async move { Ok("deploy".into()) }.boxed_local()
+        async move {
+            Ok(json::json!(
+                {
+                    "startMode":"blocking",
+                    "valid":{"Ok":""},
+                    "vols":[]
+                }
+            ))
+        }
+        .boxed_local()
     }
 
     fn start<'a>(&mut self, _: &mut Context<Self>) -> OutputResponse<'a> {
-        async move { Ok("start".into()) }.boxed_local()
+        async move { Ok(json::json!({})) }.boxed_local()
     }
 
     fn stop<'a>(&mut self, _: &mut Context<Self>) -> EmptyResponse<'a> {
-        println!("stop");
         async move { Ok(()) }.boxed_local()
     }
 
     fn run_command<'a>(
         &mut self,
         command: RunProcess,
-        mode: RuntimeMode,
-        _: &mut Context<Self>,
+        _mode: RuntimeMode,
+        ctx: &mut Context<Self>,
     ) -> ProcessIdResponse<'a> {
-        println!("start_command: {:?} in {:?} mode", command, mode);
-        async move { Ok(0) }.boxed_local()
+        let seq = self.seq.fetch_add(1, Relaxed);
+        let emitter = ctx.emitter.clone().unwrap();
+        let (tx, rx) = oneshot::channel();
+
+        // handle execution in background
+        tokio::task::spawn_local(async move {
+            emitter.command_started(seq).await;
+
+            // unblock `run_command` execution and continue in background
+            let _ = tx.send(seq);
+
+            let stdout = format!("[{}] output for command: {:?}", seq, command)
+                .as_bytes()
+                .to_vec();
+
+            tokio::time::delay_for(std::time::Duration::from_secs(1)).await;
+
+            emitter.command_stdout(seq, stdout).await;
+            emitter.command_stopped(seq, 0).await;
+        });
+
+        async move {
+            let _ = rx.await;
+            Ok(seq)
+        }
+        .boxed_local()
     }
 }
 
