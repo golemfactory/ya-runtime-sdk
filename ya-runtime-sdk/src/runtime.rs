@@ -49,7 +49,13 @@ pub trait Runtime: RuntimeDef + Default {
 
     /// Output a market Offer template stub
     fn offer<'a>(&mut self, _ctx: &mut Context<Self>) -> OutputResponse<'a> {
-        async move { Ok(serde_json::Value::default()) }.boxed_local()
+        async move {
+            Ok(crate::serialize::json::json!({
+                "constraints": "",
+                "properties": {}
+            }))
+        }
+        .boxed_local()
     }
 
     /// Perform a self-test

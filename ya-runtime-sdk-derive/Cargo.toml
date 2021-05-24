@@ -1,9 +1,12 @@
 [package]
 name = "ya-runtime-sdk-derive"
+description = "Macro implementation of #[derive(RuntimeDef)]"
 version = "0.1.0"
 authors = ["Golem Factory <contact@golem.network>"]
 edition = "2018"
 license = "GPL-3.0"
+homepage = "https://github.com/golemfactory/ya-runtime-sdk"
+repository = "https://github.com/golemfactory/ya-runtime-sdk"
 
 [lib]
 proc-macro = true
