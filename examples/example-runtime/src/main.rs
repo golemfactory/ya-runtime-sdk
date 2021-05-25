@@ -37,10 +37,12 @@ impl Runtime for ExampleRuntime {
     }
 
     fn start<'a>(&mut self, _: &mut Context<Self>) -> OutputResponse<'a> {
+        // Start the service
         async move { Ok(None) }.boxed_local()
     }
 
     fn stop<'a>(&mut self, _: &mut Context<Self>) -> EmptyResponse<'a> {
+        // Gracefully shutdown the service
         async move { Ok(()) }.boxed_local()
     }
 
@@ -50,18 +52,35 @@ impl Runtime for ExampleRuntime {
         _mode: RuntimeMode,
         ctx: &mut Context<Self>,
     ) -> ProcessIdResponse<'a> {
-        tokio::process::Command::new("echo")
+        // This example echoes the executed command and its arguments
+        let result = tokio::process::Command::new("echo")
             .arg(command.bin)
             .args(command.args.into_iter())
-            .spawn()
-            // use RunExt::handle_command to manage the future result **in background**
-            .as_command(ctx, |child, mut run_ctx| async move {
-                let output = child.wait_with_output().await?;
-                run_ctx.stdout(output.stdout).await;
-                run_ctx.stderr(output.stderr).await;
-                Ok(())
-            })
+            .spawn();
+
+        // Wraps command's lifecycle. The handler is executed in background.
+        // See `crate::runtime::RunCommandExt` docs for more information.
+        result.as_command(ctx, |child, mut run_ctx| async move {
+            let output = child.wait_with_output().await?;
+
+            run_ctx.stdout("str output").await;
+            run_ctx.stdout(String::from("str output")).await;
+            run_ctx.stdout("bytes output".as_bytes()).await;
+
+            // Vec output
+            run_ctx.stdout(output.stdout).await;
+            run_ctx.stderr(output.stderr).await;
+            Ok(())
+        })
+
+        // Alternatively, one can use the future-based variant, e.g.:
+        // let fut = async move { Ok::<_, std::io::Error>(MyResponse {}) };
+        // RunCommandExt::command(ctx, fut, |child, run_ctx| async move {
+        //     // ...
+        // })
     }
+
+    // Remaining trait functions have default implementations
 }
 
 #[tokio::main]

@@ -216,16 +216,22 @@ impl<R: Runtime + ?Sized> Context<R> {
     }
 }
 
+/// Command execution wrapper for use within `Runtime::run_command`
 pub trait RunCommandExt<R, F, T>
 where
     R: Runtime + ?Sized,
     F: Future<Output = Result<(), Error>> + 'static,
     T: 'static,
 {
+    /// Inlines `Self::command`
     fn as_command<'a, H>(self, ctx: &mut Context<R>, handler: H) -> ProcessIdResponse<'a>
     where
         H: (FnOnce(T, RunCommandContext) -> F) + 'a;
 
+    /// Wraps the command lifecycle in the following manner:
+    /// - manages command sequence numbers
+    /// - emits command start & stop events
+    /// - provides a RunCommandContext object for easier output event emission
     fn command<'a, H, Fi, Ei>(ctx: &mut Context<R>, fut: Fi, handler: H) -> ProcessIdResponse<'a>
     where
         H: (FnOnce(T, RunCommandContext) -> F) + 'a,
