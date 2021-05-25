@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+use std::io;
+
 use crate::ErrorResponse;
 use serde::Serialize;
-use std::collections::HashMap;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Error {
@@ -12,8 +14,18 @@ pub struct Error {
 impl Error {
     pub fn from_string(s: impl ToString) -> Self {
         Error {
-            code: -1,
+            code: 1,
             message: s.to_string(),
+            context: Default::default(),
+        }
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(e: io::Error) -> Self {
+        Error {
+            code: e.raw_os_error().unwrap_or(1),
+            message: e.to_string(),
             context: Default::default(),
         }
     }
