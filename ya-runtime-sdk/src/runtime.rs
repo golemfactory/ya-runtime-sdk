@@ -1,15 +1,14 @@
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
+use futures::channel::mpsc;
 use futures::future::{BoxFuture, LocalBoxFuture};
-use futures::FutureExt;
+use futures::{FutureExt, SinkExt};
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
 use crate::cli::CommandCli;
 use crate::env::{DefaultEnv, Env};
 use crate::error::Error;
-use crate::runtime_api::server::RuntimeEvent;
 use crate::{KillProcess, ProcessStatus, RunProcess};
 
 pub type ProcessId = u64;
@@ -215,28 +214,20 @@ impl<R: Runtime + ?Sized> Context<R> {
         Ok(conf_path)
     }
 
-    pub(crate) fn set_emitter(&mut self, emitter: Box<dyn RuntimeEvent + Send + Sync>) {
-        self.emitter.replace(EventEmitter::new(emitter));
+    pub(crate) fn set_emitter(&mut self, tx: mpsc::Sender<ProcessStatus>) {
+        self.emitter.replace(EventEmitter { tx });
     }
 }
 
 /// Runtime event emitter
 #[derive(Clone)]
 pub struct EventEmitter {
-    inner: Arc<Box<dyn RuntimeEvent + Send + Sync>>,
-}
-
-impl EventEmitter {
-    pub fn new(emitter: Box<dyn RuntimeEvent + Send + Sync>) -> Self {
-        Self {
-            inner: Arc::new(emitter),
-        }
-    }
+    tx: mpsc::Sender<ProcessStatus>,
 }
 
 impl EventEmitter {
     /// Emit a command started event
-    pub fn command_started<'a>(&self, process_id: ProcessId) -> BoxFuture<'a, ()> {
+    pub fn command_started(&mut self, process_id: ProcessId) -> BoxFuture<()> {
         self.emit(ProcessStatus {
             pid: process_id,
             running: true,
@@ -247,11 +238,7 @@ impl EventEmitter {
     }
 
     /// Emit a command stopped event
-    pub fn command_stopped<'a>(
-        &self,
-        process_id: ProcessId,
-        return_code: i32,
-    ) -> BoxFuture<'a, ()> {
+    pub fn command_stopped(&mut self, process_id: ProcessId, return_code: i32) -> BoxFuture<()> {
         self.emit(ProcessStatus {
             pid: process_id,
             running: false,
@@ -262,7 +249,7 @@ impl EventEmitter {
     }
 
     /// Emit a command output event (stdout)
-    pub fn command_stdout<'a>(&self, process_id: ProcessId, stdout: Vec<u8>) -> BoxFuture<'a, ()> {
+    pub fn command_stdout(&mut self, process_id: ProcessId, stdout: Vec<u8>) -> BoxFuture<()> {
         self.emit(ProcessStatus {
             pid: process_id,
             running: true,
@@ -273,7 +260,7 @@ impl EventEmitter {
     }
 
     /// Emit a command output event (stderr)
-    pub fn command_stderr<'a>(&self, process_id: ProcessId, stderr: Vec<u8>) -> BoxFuture<'a, ()> {
+    pub fn command_stderr(&mut self, process_id: ProcessId, stderr: Vec<u8>) -> BoxFuture<()> {
         self.emit(ProcessStatus {
             pid: process_id,
             running: true,
@@ -284,8 +271,8 @@ impl EventEmitter {
     }
 
     /// Emit an event
-    pub fn emit<'a>(&self, status: ProcessStatus) -> BoxFuture<'a, ()> {
-        self.inner.on_process_status(status).boxed()
+    pub fn emit(&mut self, status: ProcessStatus) -> BoxFuture<()> {
+        self.tx.send(status).then(|_| async {}).boxed()
     }
 }
 

@@ -4,7 +4,9 @@ use ya_runtime_api::server::proto::{output::Type, request::RunProcess, Output};
 use crate::cli::{Command, CommandCli};
 use crate::env::{DefaultEnv, Env};
 use crate::runtime::{Context, Runtime, RuntimeMode};
+use crate::runtime_api::server::RuntimeEvent;
 use crate::server::Server;
+use futures::StreamExt;
 
 /// Starts the runtime
 pub async fn run<R: Runtime + 'static>() -> anyhow::Result<()> {
@@ -28,8 +30,16 @@ pub async fn run_with<R: Runtime + 'static, E: Env>(env: E) -> anyhow::Result<()
             }
             RuntimeMode::Server => {
                 ya_runtime_api::server::run_async(|emitter| async move {
+                    let (tx, rx) = futures::channel::mpsc::channel(1);
+                    tokio::task::spawn_local(async move {
+                        rx.for_each(|status| async {
+                            emitter.on_process_status(status).await;
+                        })
+                        .await;
+                    });
+
                     let start = {
-                        ctx.set_emitter(Box::new(emitter));
+                        ctx.set_emitter(tx);
                         runtime.start(&mut ctx)
                     };
                     start.await.expect("Failed to start the runtime");

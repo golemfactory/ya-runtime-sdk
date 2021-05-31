@@ -55,7 +55,7 @@ impl Runtime for ExampleRuntime {
         ctx: &mut Context<Self>,
     ) -> ProcessIdResponse<'a> {
         let seq = self.seq.fetch_add(1, Relaxed);
-        let emitter = ctx.emitter.clone().unwrap();
+        let mut emitter = ctx.emitter.clone().unwrap();
         let (tx, rx) = oneshot::channel();
 
         // handle execution in background
