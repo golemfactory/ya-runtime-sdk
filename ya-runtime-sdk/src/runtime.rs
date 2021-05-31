@@ -2,13 +2,14 @@ use std::path::{Path, PathBuf};
 
 use futures::channel::mpsc;
 use futures::future::{BoxFuture, LocalBoxFuture};
-use futures::{FutureExt, SinkExt};
+use futures::{FutureExt, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
 use crate::cli::CommandCli;
 use crate::env::{DefaultEnv, Env};
 use crate::error::Error;
+use crate::runtime_api::server::RuntimeEvent;
 use crate::{KillProcess, ProcessStatus, RunProcess};
 
 pub type ProcessId = u64;
@@ -214,8 +215,8 @@ impl<R: Runtime + ?Sized> Context<R> {
         Ok(conf_path)
     }
 
-    pub(crate) fn set_emitter(&mut self, tx: mpsc::Sender<ProcessStatus>) {
-        self.emitter.replace(EventEmitter { tx });
+    pub(crate) fn set_emitter(&mut self, emitter: impl RuntimeEvent + Send + Sync + 'static) {
+        self.emitter.replace(EventEmitter::spawn(emitter));
     }
 }
 
@@ -223,6 +224,19 @@ impl<R: Runtime + ?Sized> Context<R> {
 #[derive(Clone)]
 pub struct EventEmitter {
     tx: mpsc::Sender<ProcessStatus>,
+}
+
+impl EventEmitter {
+    pub fn spawn(emitter: impl RuntimeEvent + Send + Sync + 'static) -> Self {
+        let (tx, rx) = mpsc::channel(1);
+        tokio::task::spawn_local(async move {
+            rx.for_each(|status| async {
+                emitter.on_process_status(status).await;
+            })
+            .await;
+        });
+        Self { tx }
+    }
 }
 
 impl EventEmitter {
