@@ -29,7 +29,7 @@ pub async fn run_with<R: Runtime + 'static, E: Env>(env: E) -> anyhow::Result<()
             RuntimeMode::Server => {
                 ya_runtime_api::server::run_async(|emitter| async move {
                     let start = {
-                        ctx.set_emitter(Box::new(emitter));
+                        ctx.set_emitter(emitter);
                         runtime.start(&mut ctx)
                     };
                     start.await.expect("Failed to start the runtime");
