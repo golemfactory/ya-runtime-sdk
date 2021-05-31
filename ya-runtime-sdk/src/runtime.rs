@@ -229,12 +229,7 @@ pub struct EventEmitter {
 impl EventEmitter {
     pub fn spawn(emitter: impl RuntimeEvent + Send + Sync + 'static) -> Self {
         let (tx, rx) = mpsc::channel(1);
-        tokio::task::spawn(async move {
-            rx.for_each(|status| async {
-                emitter.on_process_status(status).await;
-            })
-            .await;
-        });
+        tokio::task::spawn(rx.for_each(move |status| emitter.on_process_status(status)));
         Self { tx }
     }
 }
