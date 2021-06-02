@@ -1,12 +1,16 @@
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering::Relaxed;
 
 use futures::channel::mpsc;
 use futures::future::{BoxFuture, LocalBoxFuture};
-use futures::{FutureExt, SinkExt, StreamExt};
+use futures::{Future, FutureExt, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
 use crate::cli::CommandCli;
+use crate::common::IntoVec;
 use crate::env::{DefaultEnv, Env};
 use crate::error::Error;
 use crate::runtime_api::server::RuntimeEvent;
@@ -14,7 +18,7 @@ use crate::{KillProcess, ProcessStatus, RunProcess};
 
 pub type ProcessId = u64;
 pub type EmptyResponse<'a> = LocalBoxFuture<'a, Result<(), Error>>;
-pub type OutputResponse<'a> = LocalBoxFuture<'a, Result<serde_json::Value, Error>>;
+pub type OutputResponse<'a> = LocalBoxFuture<'a, Result<Option<serde_json::Value>, Error>>;
 pub type ProcessIdResponse<'a> = LocalBoxFuture<'a, Result<ProcessId, Error>>;
 
 /// Command handling interface for runtimes
@@ -50,10 +54,10 @@ pub trait Runtime: RuntimeDef + Default {
     /// Output a market Offer template stub
     fn offer<'a>(&mut self, _ctx: &mut Context<Self>) -> OutputResponse<'a> {
         async move {
-            Ok(crate::serialize::json::json!({
+            Ok(Some(crate::serialize::json::json!({
                 "constraints": "",
                 "properties": {}
-            }))
+            })))
         }
         .boxed_local()
     }
@@ -99,21 +103,8 @@ pub struct Context<R: Runtime + ?Sized> {
     /// and
     /// `command != Command::Deploy`
     pub emitter: Option<EventEmitter>,
-}
-
-impl<R: Runtime + ?Sized> Clone for Context<R>
-where
-    <R as RuntimeDef>::Cli: Clone,
-    <R as RuntimeDef>::Conf: Clone,
-{
-    fn clone(&self) -> Self {
-        Context {
-            cli: self.cli.clone(),
-            conf: self.conf.clone(),
-            conf_path: self.conf_path.clone(),
-            emitter: self.emitter.clone(),
-        }
-    }
+    /// Process ID sequence
+    pid_seq: AtomicU64,
 }
 
 impl<R: Runtime + ?Sized> Context<R> {
@@ -148,6 +139,7 @@ impl<R: Runtime + ?Sized> Context<R> {
             conf,
             conf_path,
             emitter: None,
+            pid_seq: Default::default(),
         })
     }
 
@@ -215,8 +207,129 @@ impl<R: Runtime + ?Sized> Context<R> {
         Ok(conf_path)
     }
 
+    pub(crate) fn next_pid(&self) -> ProcessId {
+        self.pid_seq.fetch_add(1, Relaxed)
+    }
+
     pub(crate) fn set_emitter(&mut self, emitter: impl RuntimeEvent + Send + Sync + 'static) {
         self.emitter.replace(EventEmitter::spawn(emitter));
+    }
+}
+
+/// Command execution wrapper for use within `Runtime::run_command`
+pub trait RunCommandExt<R, F, T>
+where
+    R: Runtime + ?Sized,
+    F: Future<Output = Result<(), Error>> + 'static,
+    T: 'static,
+{
+    /// Inlines `Self::command`
+    fn as_command<'a, H>(self, ctx: &mut Context<R>, handler: H) -> ProcessIdResponse<'a>
+    where
+        H: (FnOnce(T, RunCommandContext) -> F) + 'a;
+
+    /// Wraps the command lifecycle in the following manner:
+    /// - manages command sequence numbers
+    /// - emits command start & stop events
+    /// - provides a RunCommandContext object for easier output event emission
+    fn command<'a, H, Fi, Ei>(ctx: &mut Context<R>, fut: Fi, handler: H) -> ProcessIdResponse<'a>
+    where
+        H: (FnOnce(T, RunCommandContext) -> F) + 'a,
+        Fi: Future<Output = Result<T, Ei>> + 'a,
+        Error: From<Ei>,
+    {
+        let pid = ctx.next_pid();
+        let mut cmd_ctx = RunCommandContext {
+            id: pid,
+            emitter: ctx.emitter.clone(),
+        };
+
+        async move {
+            let val = fut.await?;
+            cmd_ctx.started().await;
+
+            let fut = handler(val, cmd_ctx.clone());
+            tokio::task::spawn_local(async move {
+                let return_code = fut.await.is_err() as i32;
+                cmd_ctx.stopped(return_code).await;
+            });
+
+            Ok(pid)
+        }
+        .boxed_local()
+    }
+}
+
+impl<R, F, T, E> RunCommandExt<R, F, T> for Result<T, E>
+where
+    R: Runtime + ?Sized,
+    F: Future<Output = Result<(), Error>> + 'static,
+    T: 'static,
+    E: 'static,
+    Error: From<E>,
+{
+    fn as_command<'a, H>(self, ctx: &mut Context<R>, handler: H) -> ProcessIdResponse<'a>
+    where
+        H: (FnOnce(T, RunCommandContext) -> F) + 'a,
+    {
+        Self::command(ctx, async move { self }, handler)
+    }
+}
+
+/// Command execution handler
+#[derive(Clone)]
+pub struct RunCommandContext {
+    pub(crate) id: ProcessId,
+    pub(crate) emitter: Option<EventEmitter>,
+}
+
+impl RunCommandContext {
+    /// Get command ID
+    pub fn id(&self) -> &ProcessId {
+        &self.id
+    }
+
+    pub(crate) fn started(&mut self) -> BoxFuture<()> {
+        let id = self.id;
+        self.emitter
+            .as_mut()
+            .map(|e| e.command_started(id))
+            .unwrap_or_else(|| futures::future::ready(()).boxed())
+    }
+
+    pub(crate) fn stopped(&mut self, return_code: i32) -> BoxFuture<()> {
+        let id = self.id;
+        self.emitter
+            .as_mut()
+            .map(|e| e.command_stopped(id, return_code))
+            .unwrap_or_else(|| futures::future::ready(()).boxed())
+    }
+
+    /// Emit a RUN command output event (stdout)
+    pub fn stdout(&mut self, output: impl IntoVec<u8>) -> BoxFuture<()> {
+        let id = self.id;
+        let output = output.into_vec();
+        match self.emitter {
+            Some(ref mut e) => e.command_stdout(id, output),
+            None => Self::print_output(output),
+        }
+    }
+
+    /// Emit a RUN command output event (stderr)
+    pub fn stderr(&mut self, output: impl IntoVec<u8>) -> BoxFuture<()> {
+        let id = self.id;
+        let output = output.into_vec();
+        match self.emitter {
+            Some(ref mut e) => e.command_stderr(id, output),
+            None => Self::print_output(output),
+        }
+    }
+
+    fn print_output<'a>(output: impl IntoVec<u8>) -> BoxFuture<'a, ()> {
+        let mut stdout = std::io::stdout();
+        let _ = stdout.write_all(output.into_vec().as_slice());
+        let _ = stdout.flush();
+        futures::future::ready(()).boxed()
     }
 }
 
@@ -258,24 +371,32 @@ impl EventEmitter {
     }
 
     /// Emit a command output event (stdout)
-    pub fn command_stdout(&mut self, process_id: ProcessId, stdout: Vec<u8>) -> BoxFuture<()> {
+    pub fn command_stdout(
+        &mut self,
+        process_id: ProcessId,
+        stdout: impl IntoVec<u8>,
+    ) -> BoxFuture<()> {
         self.emit(ProcessStatus {
             pid: process_id,
             running: true,
             return_code: 0,
-            stdout,
+            stdout: stdout.into_vec(),
             stderr: Default::default(),
         })
     }
 
     /// Emit a command output event (stderr)
-    pub fn command_stderr(&mut self, process_id: ProcessId, stderr: Vec<u8>) -> BoxFuture<()> {
+    pub fn command_stderr(
+        &mut self,
+        process_id: ProcessId,
+        stderr: impl IntoVec<u8>,
+    ) -> BoxFuture<()> {
         self.emit(ProcessStatus {
             pid: process_id,
             running: true,
             return_code: 0,
             stdout: Default::default(),
-            stderr,
+            stderr: stderr.into_vec(),
         })
     }
 

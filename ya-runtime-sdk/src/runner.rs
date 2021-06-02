@@ -17,14 +17,27 @@ pub async fn run_with<R: Runtime + 'static, E: Env>(env: E) -> anyhow::Result<()
     let mut ctx = Context::<R>::try_with(env)?;
 
     match ctx.cli.command() {
-        Command::Deploy { args: _ } => {
-            let deployment = runtime.deploy(&mut ctx).await?;
+        Command::Deploy { .. } => {
+            let deployment = match runtime.deploy(&mut ctx).await? {
+                Some(deployment) => deployment,
+                None => {
+                    crate::serialize::json::json!({
+                        "startMode": match R::MODE {
+                            RuntimeMode::Server => "blocking",
+                            RuntimeMode::Command => "empty",
+                        },
+                        "valid": {"Ok": ""},
+                        "vols": []
+                    })
+                }
+            };
             output(deployment).await?;
         }
-        Command::Start { args: _ } => match R::MODE {
+        Command::Start { .. } => match R::MODE {
             RuntimeMode::Command => {
-                let started = runtime.start(&mut ctx).await?;
-                output(started).await?;
+                if let Some(started) = runtime.start(&mut ctx).await? {
+                    output(started).await?;
+                }
             }
             RuntimeMode::Server => {
                 ya_runtime_api::server::run_async(|emitter| async move {
@@ -32,7 +45,16 @@ pub async fn run_with<R: Runtime + 'static, E: Env>(env: E) -> anyhow::Result<()
                         ctx.set_emitter(emitter);
                         runtime.start(&mut ctx)
                     };
-                    start.await.expect("Failed to start the runtime");
+
+                    let mut cmd_ctx = crate::runtime::RunCommandContext {
+                        id: ctx.next_pid(),
+                        emitter: ctx.emitter.clone(),
+                    };
+
+                    if let Some(out) = start.await.expect("Failed to start the runtime") {
+                        cmd_ctx.stdout(out.to_string()).await;
+                    }
+
                     Server::new(runtime, ctx)
                 })
                 .await;
@@ -62,11 +84,12 @@ pub async fn run_with<R: Runtime + 'static, E: Env>(env: E) -> anyhow::Result<()
 
             output(serde_json::json!(pid)).await?;
         }
-        Command::OfferTemplate { args: _ } => {
-            let template = runtime.offer(&mut ctx).await?;
-            output(template).await?;
+        Command::OfferTemplate { .. } => {
+            if let Some(template) = runtime.offer(&mut ctx).await? {
+                output(template).await?;
+            }
         }
-        Command::Test { args: _ } => runtime.test(&mut ctx).await?,
+        Command::Test { .. } => runtime.test(&mut ctx).await?,
     }
 
     Ok(())
