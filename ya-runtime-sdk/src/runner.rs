@@ -45,7 +45,20 @@ pub async fn run_with<R: Runtime + 'static, E: Env>(env: E) -> anyhow::Result<()
                         ctx.set_emitter(emitter);
                         runtime.start(&mut ctx)
                     };
-                    start.await.expect("Failed to start the runtime");
+
+                    let mut cmd_ctx = crate::runtime::RunCommandContext {
+                        id: ctx.next_pid(),
+                        emitter: ctx.emitter.clone(),
+                    };
+
+                    {
+                        cmd_ctx.started().await;
+                        if let Some(out) = start.await.expect("Failed to start the runtime") {
+                            cmd_ctx.stdout(out.to_string()).await;
+                        }
+                        cmd_ctx.stopped(0).await;
+                    }
+
                     Server::new(runtime, ctx)
                 })
                 .await;

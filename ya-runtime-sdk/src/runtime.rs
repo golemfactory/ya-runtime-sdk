@@ -279,8 +279,8 @@ where
 /// Command execution handler
 #[derive(Clone)]
 pub struct RunCommandContext {
-    id: ProcessId,
-    emitter: Option<EventEmitter>,
+    pub(crate) id: ProcessId,
+    pub(crate) emitter: Option<EventEmitter>,
 }
 
 impl RunCommandContext {
@@ -289,7 +289,7 @@ impl RunCommandContext {
         &self.id
     }
 
-    fn started(&mut self) -> BoxFuture<()> {
+    pub(crate) fn started(&mut self) -> BoxFuture<()> {
         let id = self.id;
         self.emitter
             .as_mut()
@@ -297,7 +297,7 @@ impl RunCommandContext {
             .unwrap_or_else(|| futures::future::ready(()).boxed())
     }
 
-    fn stopped(&mut self, return_code: i32) -> BoxFuture<()> {
+    pub(crate) fn stopped(&mut self, return_code: i32) -> BoxFuture<()> {
         let id = self.id;
         self.emitter
             .as_mut()

@@ -37,8 +37,12 @@ impl Runtime for ExampleRuntime {
     }
 
     fn start<'a>(&mut self, _: &mut Context<Self>) -> OutputResponse<'a> {
-        // Start the service
-        async move { Ok(None) }.boxed_local()
+        async move {
+            Ok(Some(serialize::json::json!({
+                "exampleProperty": "running",
+            })))
+        }
+        .boxed_local()
     }
 
     fn stop<'a>(&mut self, _: &mut Context<Self>) -> EmptyResponse<'a> {
