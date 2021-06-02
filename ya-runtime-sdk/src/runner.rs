@@ -51,12 +51,8 @@ pub async fn run_with<R: Runtime + 'static, E: Env>(env: E) -> anyhow::Result<()
                         emitter: ctx.emitter.clone(),
                     };
 
-                    {
-                        cmd_ctx.started().await;
-                        if let Some(out) = start.await.expect("Failed to start the runtime") {
-                            cmd_ctx.stdout(out.to_string()).await;
-                        }
-                        cmd_ctx.stopped(0).await;
+                    if let Some(out) = start.await.expect("Failed to start the runtime") {
+                        cmd_ctx.stdout(out.to_string()).await;
                     }
 
                     Server::new(runtime, ctx)

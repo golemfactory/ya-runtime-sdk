@@ -1,5 +1,6 @@
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
+use std::process::Stdio;
 use structopt::StructOpt;
 use ya_runtime_sdk::*;
 
@@ -57,21 +58,18 @@ impl Runtime for ExampleRuntime {
         ctx: &mut Context<Self>,
     ) -> ProcessIdResponse<'a> {
         // This example echoes the executed command and its arguments
-        let result = tokio::process::Command::new("echo")
+        let started = tokio::process::Command::new("/bin/echo")
             .arg(command.bin)
             .args(command.args.into_iter())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .stdin(Stdio::null())
             .spawn();
 
         // Wraps command's lifecycle. The handler is executed in background.
         // See `crate::runtime::RunCommandExt` docs for more information.
-        result.as_command(ctx, |child, mut run_ctx| async move {
+        started.as_command(ctx, |child, mut run_ctx| async move {
             let output = child.wait_with_output().await?;
-
-            run_ctx.stdout("str output").await;
-            run_ctx.stdout(String::from("str output")).await;
-            run_ctx.stdout("bytes output".as_bytes()).await;
-
-            // Vec output
             run_ctx.stdout(output.stdout).await;
             run_ctx.stderr(output.stderr).await;
             Ok(())
