@@ -65,11 +65,29 @@ The `Runtime` trait specifies handlers for each of the execution phases:
   **Output:** Optional JSON response in the following format:
   ```json 
   {
-      "startMode": "blocking" | "empty",
-      "valid": {"Ok": ""},
-      "vols": []
+      "startMode": "blocking",
+      "valid": {"Ok": "success"},
+      "vols": [
+          {"name": "vol-9a0c1c4a", "path": "/in"},
+          {"name": "vol-a68672e0", "path": "/out"}
+      ],
+      "customKey": "customValue"
   }
   ```
+
+  **Required properties**:
+  - `startMode`: 
+    - `"blocking"` for `RuntimeMode::Server`
+    - `"empty"` for `RuntimeMode::Command`
+  
+  - `valid` 
+    - `{"Ok": "success message"}`
+    - `{"Err": "error message"}`
+  
+  - `vols` (may be empty)
+    
+    array of `{"name": "vol", "path": "/path"}` objects
+
 
 - `start`
 
