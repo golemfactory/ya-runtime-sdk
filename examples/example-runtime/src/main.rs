@@ -1,6 +1,5 @@
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
-use std::process::Stdio;
 use structopt::StructOpt;
 use ya_runtime_sdk::*;
 
@@ -57,30 +56,40 @@ impl Runtime for ExampleRuntime {
         _mode: RuntimeMode,
         ctx: &mut Context<Self>,
     ) -> ProcessIdResponse<'a> {
-        // This example echoes the executed command and its arguments
+        use std::process::Stdio;
+
+        // Echo the executed command and its arguments
         let started = tokio::process::Command::new("/bin/echo")
             .arg(command.bin)
-            .args(command.args.into_iter())
+            .args(command.args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .stdin(Stdio::null())
             .spawn();
 
         // Wraps command's lifecycle. The handler is executed in background.
-        // See `crate::runtime::RunCommandExt` docs for more information.
-        started.as_command(ctx, |child, mut run_ctx| async move {
+        // Result of `started` is handled prior to emitting command lifecycle events.
+        futures::future::ready(started).as_command(ctx, |child, mut run_ctx| async move {
             let output = child.wait_with_output().await?;
             run_ctx.stdout(output.stdout).await;
             run_ctx.stderr(output.stderr).await;
             Ok(())
         })
-
-        // Alternatively, one can use the future-based variant, e.g.:
-        // let fut = async move { Ok::<_, std::io::Error>(MyResponse {}) };
-        // RunCommandExt::command(ctx, fut, |child, run_ctx| async move {
-        //     // ...
-        // })
     }
+
+    // Simple command handler
+    //
+    // fn run_command<'a>(
+    //     &mut self,
+    //     command: RunProcess,
+    //     _mode: RuntimeMode,
+    //     ctx: &mut Context<Self>,
+    // ) -> ProcessIdResponse<'a> {
+    //     ctx.command(|mut run_ctx| async move {
+    //         run_ctx.stdout(format!("[{:?}] stdout", command)).await;
+    //         Ok(())
+    //     })
+    // }
 
     // Remaining trait functions have default implementations
 }
