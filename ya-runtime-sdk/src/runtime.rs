@@ -216,64 +216,88 @@ impl<R: Runtime + ?Sized> Context<R> {
     }
 }
 
-/// Command execution wrapper for use within `Runtime::run_command`
-pub trait RunCommandExt<R, F, T>
+impl<R: Runtime + ?Sized> Context<R> {
+    pub fn command<'a, H, Fh>(&mut self, handler: H) -> ProcessIdResponse<'a>
+    where
+        H: (FnOnce(RunCommandContext) -> Fh) + 'static,
+        Fh: Future<Output = Result<(), Error>> + 'a,
+    {
+        let pid = self.next_pid();
+        let emitter = self.emitter.clone();
+
+        run_command(pid, emitter, move |run_ctx| {
+            async move { Ok(handler(run_ctx).await?) }.boxed_local()
+        })
+    }
+}
+
+/// Wraps command lifecycle in the following manner:
+/// - manages command sequence numbers
+/// - emits command start & stop events
+/// - provides a RunCommandContext object for easier output event emission
+pub trait RunCommandExt<R: Runtime + ?Sized> {
+    type Item: 'static;
+
+    /// Wrap `self` in `run_command`
+    fn as_command<'a, H, Fh>(self, ctx: &mut Context<R>, handler: H) -> ProcessIdResponse<'a>
+    where
+        H: (FnOnce(Self::Item, RunCommandContext) -> Fh) + 'static,
+        Fh: Future<Output = Result<(), Error>> + 'static;
+}
+
+/// Implements `RunCommandExt` for `Future`s outputting `Result`s.
+/// The output result is checked prior to emitting any command lifecycle events.
+impl<R, F, Rt, Re> RunCommandExt<R> for F
 where
     R: Runtime + ?Sized,
-    F: Future<Output = Result<(), Error>> + 'static,
-    T: 'static,
+    F: Future<Output = Result<Rt, Re>> + 'static,
+    Rt: 'static,
+    Re: 'static,
+    Error: From<Re>,
 {
-    /// Inlines `Self::command`
-    fn as_command<'a, H>(self, ctx: &mut Context<R>, handler: H) -> ProcessIdResponse<'a>
-    where
-        H: (FnOnce(T, RunCommandContext) -> F) + 'a;
+    type Item = Rt;
 
-    /// Wraps the command lifecycle in the following manner:
-    /// - manages command sequence numbers
-    /// - emits command start & stop events
-    /// - provides a RunCommandContext object for easier output event emission
-    fn command<'a, H, Fi, Ei>(ctx: &mut Context<R>, fut: Fi, handler: H) -> ProcessIdResponse<'a>
+    fn as_command<'a, H, Fh>(self, ctx: &mut Context<R>, handler: H) -> ProcessIdResponse<'a>
     where
-        H: (FnOnce(T, RunCommandContext) -> F) + 'a,
-        Fi: Future<Output = Result<T, Ei>> + 'a,
-        Error: From<Ei>,
+        H: (FnOnce(Self::Item, RunCommandContext) -> Fh) + 'static,
+        Fh: Future<Output = Result<(), Error>> + 'static,
     {
         let pid = ctx.next_pid();
-        let mut cmd_ctx = RunCommandContext {
-            id: pid,
-            emitter: ctx.emitter.clone(),
-        };
+        let emitter = ctx.emitter.clone();
 
         async move {
-            let val = fut.await?;
-            cmd_ctx.started().await;
-
-            let fut = handler(val, cmd_ctx.clone());
-            tokio::task::spawn_local(async move {
-                let return_code = fut.await.is_err() as i32;
-                cmd_ctx.stopped(return_code).await;
+            let value = self.await?;
+            let fut = run_command(pid, emitter, move |run_ctx| async move {
+                Ok(handler(value, run_ctx).await?)
             });
-
-            Ok(pid)
+            Ok(fut.await?)
         }
         .boxed_local()
     }
 }
 
-impl<R, F, T, E> RunCommandExt<R, F, T> for Result<T, E>
+fn run_command<'a, H, F>(
+    pid: ProcessId,
+    emitter: Option<EventEmitter>,
+    handler: H,
+) -> ProcessIdResponse<'a>
 where
-    R: Runtime + ?Sized,
+    H: (FnOnce(RunCommandContext) -> F) + 'static,
     F: Future<Output = Result<(), Error>> + 'static,
-    T: 'static,
-    E: 'static,
-    Error: From<E>,
 {
-    fn as_command<'a, H>(self, ctx: &mut Context<R>, handler: H) -> ProcessIdResponse<'a>
-    where
-        H: (FnOnce(T, RunCommandContext) -> F) + 'a,
-    {
-        Self::command(ctx, async move { self }, handler)
+    let mut cmd_ctx = RunCommandContext { id: pid, emitter };
+    async move {
+        cmd_ctx.started().await;
+
+        let fut = handler(cmd_ctx.clone());
+        tokio::task::spawn_local(async move {
+            let return_code = fut.await.is_err() as i32;
+            cmd_ctx.stopped(return_code).await;
+        });
+
+        Ok(pid)
     }
+    .boxed_local()
 }
 
 /// Command execution handler
