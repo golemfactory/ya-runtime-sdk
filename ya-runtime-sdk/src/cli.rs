@@ -21,5 +21,17 @@ pub enum Command {
     Test { args: Vec<String> },
 }
 
+impl Command {
+    pub fn args(&self) -> &Vec<String> {
+        match self {
+            Self::Deploy { args }
+            | Self::Start { args }
+            | Self::Run { args }
+            | Self::OfferTemplate { args }
+            | Self::Test { args } => &args,
+        }
+    }
+}
+
 #[derive(StructOpt)]
 pub struct EmptyArgs {}
