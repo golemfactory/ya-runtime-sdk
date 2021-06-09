@@ -76,19 +76,24 @@ The `Runtime` trait specifies handlers for each of the execution phases:
   ```
 
   **Required properties**:
-  - `startMode`: 
+  - `startMode`
+    
+    Determines whether a runtime is a long-running application or a one-shot command.
     - `"blocking"` for `RuntimeMode::Server`
     - `"empty"` for `RuntimeMode::Command`
   
-  - `valid` 
+  - `valid`
+    
+    Deployment status.
     - `{"Ok": "success message"}`
     - `{"Err": "error message"}`
   
-  - `vols` (may be empty)
+  - `vols`
     
-    array of `{"name": "vol", "path": "/path"}` objects
-
-
+    Local filesystem directory to runtime directory mapping.
+    - `name` is a subdirectory on a local filesystem, in a directory chosen by the Supervisor,
+    - `path` is an alias of that directory, seen from inside the runtime and Supervisor services (e.g. file transfer)
+    
 - `start`
 
   **Description:** Enable the runtime to be used by the Requestor.
