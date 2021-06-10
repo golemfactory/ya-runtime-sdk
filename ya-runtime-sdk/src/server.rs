@@ -2,8 +2,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use futures::{FutureExt, TryFutureExt};
+use ya_runtime_api::server::proto::response::create_network::Endpoint;
 use ya_runtime_api::server::{
-    AsyncResponse, KillProcess, RunProcess, RunProcessResp, RuntimeService,
+    AsyncResponse, CreateNetwork, CreateNetworkResp, KillProcess, RunProcess, RunProcessResp,
+    RuntimeService,
 };
 
 use crate::runtime::RuntimeMode;
@@ -47,6 +49,20 @@ impl<R: Runtime> RuntimeService for Server<R> {
         let mut ctx = self.ctx.borrow_mut();
         runtime
             .kill_command(kill, &mut ctx)
+            .map_err(Into::into)
+            .boxed_local()
+    }
+
+    fn create_network(&self, network: CreateNetwork) -> AsyncResponse<'_, CreateNetworkResp> {
+        let mut runtime = self.runtime.borrow_mut();
+        let mut ctx = self.ctx.borrow_mut();
+        runtime
+            .join_network(network, &mut ctx)
+            .map(|result| {
+                result.map(|endpoint| CreateNetworkResp {
+                    endpoint: Some(Endpoint::Socket(endpoint)),
+                })
+            })
             .map_err(Into::into)
             .boxed_local()
     }

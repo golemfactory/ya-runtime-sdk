@@ -14,11 +14,12 @@ use crate::common::IntoVec;
 use crate::env::{DefaultEnv, Env};
 use crate::error::Error;
 use crate::runtime_api::server::RuntimeEvent;
-use crate::{KillProcess, ProcessStatus, RunProcess};
+use crate::{CreateNetwork, KillProcess, ProcessStatus, RunProcess};
 
 pub type ProcessId = u64;
 pub type EmptyResponse<'a> = LocalBoxFuture<'a, Result<(), Error>>;
 pub type OutputResponse<'a> = LocalBoxFuture<'a, Result<Option<serde_json::Value>, Error>>;
+pub type EndpointResponse<'a> = LocalBoxFuture<'a, Result<String, Error>>;
 pub type ProcessIdResponse<'a> = LocalBoxFuture<'a, Result<ProcessId, Error>>;
 
 /// Command handling interface for runtimes
@@ -65,6 +66,15 @@ pub trait Runtime: RuntimeDef + Default {
     /// Perform a self-test
     fn test<'a>(&mut self, _ctx: &mut Context<Self>) -> EmptyResponse<'a> {
         async move { Ok(()) }.boxed_local()
+    }
+
+    /// Join a VPN network
+    fn join_network<'a>(
+        &mut self,
+        _network: CreateNetwork,
+        _ctx: &mut Context<Self>,
+    ) -> EndpointResponse<'a> {
+        async move { Err(Error::from_string("Not supported")) }.boxed_local()
     }
 }
 
