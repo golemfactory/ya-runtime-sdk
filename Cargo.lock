@@ -835,6 +835,7 @@ checksum = "6703a273949a90131b290be1fe7b039d0fc884aa1935860dfcbe056f28cd8092"
 dependencies = [
  "bytes",
  "fnv",
+ "futures-core",
  "lazy_static",
  "libc",
  "memchr",
@@ -862,9 +863,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.2.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "571da51182ec208780505a32528fc5512a8fe1443ab960b3f2f3ef093cd16930"
+checksum = "be8242891f2b6cbef26a2d7e8605133c2c554cd35b3e4948ea892d6d68436499"
 dependencies = [
  "bytes",
  "futures-core",
@@ -974,8 +975,9 @@ dependencies = [
 
 [[package]]
 name = "ya-runtime-api"
-version = "0.2.1"
-source = "git+https://github.com/golemfactory/yagna.git?rev=3d0bee5c12ce64bdb68f11c765f77eab762984ab#3d0bee5c12ce64bdb68f11c765f77eab762984ab"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e828c0b288dbda53f1f98dfa3534b5cecca82fce98885cf526fa120513c92cbc"
 dependencies = [
  "anyhow",
  "bytes",
