@@ -246,7 +246,7 @@ The `Context` struct exposes the following properties:
 
 ### Configuration
 
-Configuration struct can be set via a `#[config(..)]` attribute of the `RuntimeDef` derive macro. On runtime startup, 
+Configuration struct can be set via a `#[conf(..)]` attribute of the `RuntimeDef` derive macro. On runtime startup, 
 configuration is read from a file located at `~/.local/share/<crate_name>/<crate_name>.<format>` and
 serialized to disk with default values when missing.
 
