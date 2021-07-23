@@ -1,5 +1,7 @@
+use std::cell::RefCell;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 
@@ -13,8 +15,8 @@ use crate::cli::CommandCli;
 use crate::common::IntoVec;
 use crate::env::{DefaultEnv, Env};
 use crate::error::Error;
-use crate::runtime_api::server::RuntimeEvent;
-use crate::{CreateNetwork, KillProcess, ProcessStatus, RunProcess};
+use crate::runtime_api::server::RuntimeHandler;
+use crate::{CreateNetwork, KillProcess, ProcessStatus, RunProcess, RuntimeStatus};
 
 pub type ProcessId = u64;
 pub type EmptyResponse<'a> = LocalBoxFuture<'a, Result<(), Error>>;
@@ -221,7 +223,7 @@ impl<R: Runtime + ?Sized> Context<R> {
         self.pid_seq.fetch_add(1, Relaxed)
     }
 
-    pub(crate) fn set_emitter(&mut self, emitter: impl RuntimeEvent + Send + Sync + 'static) {
+    pub(crate) fn set_emitter(&mut self, emitter: impl RuntimeHandler + Send + Sync + 'static) {
         self.emitter.replace(EventEmitter::spawn(emitter));
     }
 }
@@ -367,17 +369,50 @@ impl RunCommandContext {
     }
 }
 
+/// Runtime event kind
+#[derive(Clone, Debug)]
+pub enum EventKind {
+    Process(ProcessStatus),
+    Runtime(RuntimeStatus),
+}
+
+impl From<ProcessStatus> for EventKind {
+    fn from(status: ProcessStatus) -> Self {
+        Self::Process(status)
+    }
+}
+
+impl From<RuntimeStatus> for EventKind {
+    fn from(status: RuntimeStatus) -> Self {
+        Self::Runtime(status)
+    }
+}
+
 /// Runtime event emitter
 #[derive(Clone)]
 pub struct EventEmitter {
-    tx: mpsc::Sender<ProcessStatus>,
+    tx_process: mpsc::Sender<ProcessStatus>,
+    tx_runtime: mpsc::Sender<RuntimeStatus>,
 }
 
 impl EventEmitter {
-    pub fn spawn(emitter: impl RuntimeEvent + Send + Sync + 'static) -> Self {
-        let (tx, rx) = mpsc::channel(1);
-        tokio::task::spawn(rx.for_each(move |status| emitter.on_process_status(status)));
-        Self { tx }
+    pub fn spawn(emitter: impl RuntimeHandler + 'static) -> Self {
+        let (tx_p, rx_p) = mpsc::channel(1);
+        let (tx_r, rx_r) = mpsc::channel(1);
+        let e_p = Rc::new(RefCell::new(emitter));
+        let e_r = e_p.clone();
+
+        tokio::task::spawn_local(
+            rx_p.for_each(move |status| e_p.borrow().on_process_status(status)),
+        );
+        tokio::task::spawn_local(
+            rx_r.for_each(move |status| e_r.borrow().on_runtime_status(status)),
+        );
+
+        Self {
+            tx_process: tx_p,
+            tx_runtime: tx_r,
+        }
     }
 }
 
@@ -435,8 +470,11 @@ impl EventEmitter {
     }
 
     /// Emit an event
-    pub fn emit(&mut self, status: ProcessStatus) -> BoxFuture<()> {
-        self.tx.send(status).then(|_| async {}).boxed()
+    pub fn emit(&mut self, event: impl Into<EventKind>) -> BoxFuture<()> {
+        match event.into() {
+            EventKind::Process(status) => self.tx_process.send(status).then(|_| async {}).boxed(),
+            EventKind::Runtime(status) => self.tx_runtime.send(status).then(|_| async {}).boxed(),
+        }
     }
 }
 

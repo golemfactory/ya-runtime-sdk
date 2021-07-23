@@ -977,8 +977,8 @@ dependencies = [
 
 [[package]]
 name = "ya-runtime-api"
-version = "0.3.1"
-source = "git+https://github.com/golemfactory/yagna.git?rev=20e8da5a3d76321c2ac8ba2afe78706a0c478bd5#20e8da5a3d76321c2ac8ba2afe78706a0c478bd5"
+version = "0.4.0"
+source = "git+https://github.com/golemfactory/yagna.git?rev=fa2a42b985831e28e5b3d3032c8be8809ceb0514#fa2a42b985831e28e5b3d3032c8be8809ceb0514"
 dependencies = [
  "anyhow",
  "bytes",
@@ -994,7 +994,7 @@ dependencies = [
 
 [[package]]
 name = "ya-runtime-sdk"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "directories",
