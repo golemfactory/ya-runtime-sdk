@@ -1,5 +1,7 @@
 pub use ya_runtime_api as runtime_api;
-pub use ya_runtime_api::server::{ErrorResponse, KillProcess, ProcessStatus, RunProcess};
+pub use ya_runtime_api::server::{
+    CreateNetwork, ErrorResponse, KillProcess, ProcessStatus, RunProcess,
+};
 
 pub use cli::Command;
 pub use runner::{run, run_with};
