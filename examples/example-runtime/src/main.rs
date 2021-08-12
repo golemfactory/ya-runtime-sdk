@@ -53,10 +53,15 @@ impl Runtime for ExampleRuntime {
     fn run_command<'a>(
         &mut self,
         command: RunProcess,
-        _mode: RuntimeMode,
+        mode: RuntimeMode,
         ctx: &mut Context<Self>,
     ) -> ProcessIdResponse<'a> {
         use std::process::Stdio;
+
+        if let RuntimeMode::Command = mode {
+            return futures::future::err(anyhow::anyhow!("Command mode is not supported").into())
+                .boxed_local();
+        }
 
         // Echo the executed command and its arguments
         let started = tokio::process::Command::new("/bin/echo")
