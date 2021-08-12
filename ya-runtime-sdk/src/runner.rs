@@ -12,7 +12,18 @@ pub async fn run<R: Runtime + 'static>() -> anyhow::Result<()> {
 }
 
 /// Starts the runtime using a custom environment configuration provider
-pub async fn run_with<R: Runtime + 'static, E: Env>(env: E) -> anyhow::Result<()> {
+pub async fn run_with<R: Runtime + 'static, E: Env + Send + 'static>(env: E) -> anyhow::Result<()> {
+    tokio::task::spawn_blocking(move || {
+        let handle = tokio::runtime::Handle::current();
+        handle.block_on(async {
+            let set = tokio::task::LocalSet::new();
+            set.run_until(inner::<R, E>(env)).await
+        })
+    })
+    .await?
+}
+
+async fn inner<R: Runtime + 'static, E: Env + Send + 'static>(env: E) -> anyhow::Result<()> {
     let mut runtime = R::default();
     let mut ctx = Context::<R>::try_with(env)?;
 
