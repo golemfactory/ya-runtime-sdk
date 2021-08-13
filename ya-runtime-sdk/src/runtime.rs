@@ -15,8 +15,7 @@ use crate::cli::CommandCli;
 use crate::common::IntoVec;
 use crate::env::{DefaultEnv, Env};
 use crate::error::Error;
-use crate::runtime_api::server::RuntimeHandler;
-use crate::{CreateNetwork, KillProcess, ProcessStatus, RunProcess, RuntimeStatus};
+use crate::runtime_api::server::*;
 
 pub type ProcessId = u64;
 pub type EmptyResponse<'a> = LocalBoxFuture<'a, Result<(), Error>>;
@@ -388,6 +387,12 @@ impl From<RuntimeStatus> for EventKind {
     }
 }
 
+impl From<RuntimeStatusKind> for EventKind {
+    fn from(kind: RuntimeStatusKind) -> Self {
+        Self::Runtime(RuntimeStatus { kind: Some(kind) })
+    }
+}
+
 /// Runtime event emitter
 #[derive(Clone)]
 pub struct EventEmitter {
@@ -467,6 +472,16 @@ impl EventEmitter {
             stdout: Default::default(),
             stderr: stderr.into_vec(),
         })
+    }
+
+    /// Emit a state event
+    pub fn state(&mut self, state: RuntimeState) -> BoxFuture<()> {
+        self.emit(RuntimeStatusKind::State(state))
+    }
+
+    /// Emit a counter event
+    pub fn counter(&mut self, counter: RuntimeCounter) -> BoxFuture<()> {
+        self.emit(RuntimeStatusKind::Counter(counter))
     }
 
     /// Emit an event

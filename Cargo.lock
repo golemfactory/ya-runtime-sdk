@@ -74,6 +74,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "custom-counters"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "serde",
+ "structopt",
+ "tokio",
+ "ya-runtime-sdk",
+]
+
+[[package]]
 name = "directories"
 version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -978,7 +990,7 @@ dependencies = [
 [[package]]
 name = "ya-runtime-api"
 version = "0.4.0"
-source = "git+https://github.com/golemfactory/yagna.git?rev=fa2a42b985831e28e5b3d3032c8be8809ceb0514#fa2a42b985831e28e5b3d3032c8be8809ceb0514"
+source = "git+https://github.com/golemfactory/yagna.git?rev=525e57f6b48f2a6582b12a1c7d0c0739a8c8c12d#525e57f6b48f2a6582b12a1c7d0c0739a8c8c12d"
 dependencies = [
  "anyhow",
  "bytes",
