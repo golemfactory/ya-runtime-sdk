@@ -2,5 +2,6 @@
 members = [
     "ya-runtime-sdk-derive",
     "ya-runtime-sdk",
-    "examples/example-runtime"
+    "examples/example-runtime",
+    "examples/command-mode"
 ]

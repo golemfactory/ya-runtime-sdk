@@ -33,7 +33,9 @@ pub trait Runtime: RuntimeDef + Default {
     fn start<'a>(&mut self, ctx: &mut Context<Self>) -> OutputResponse<'a>;
 
     /// Stop the runtime
-    fn stop<'a>(&mut self, ctx: &mut Context<Self>) -> EmptyResponse<'a>;
+    fn stop<'a>(&mut self, _ctx: &mut Context<Self>) -> EmptyResponse<'a> {
+        async move { Ok(()) }.boxed_local()
+    }
 
     /// Start a runtime command
     fn run_command<'a>(
