@@ -1,8 +1,10 @@
+use futures::future::LocalBoxFuture;
+use futures::FutureExt;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::io;
 
 use crate::ErrorResponse;
-use serde::Serialize;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Error {
@@ -12,6 +14,11 @@ pub struct Error {
 }
 
 impl Error {
+    pub fn response<'a, T: 'a>(s: impl ToString) -> LocalBoxFuture<'a, Result<T, Self>> {
+        let err = Self::from_string(s);
+        futures::future::err(err).boxed_local()
+    }
+
     pub fn from_string(s: impl ToString) -> Self {
         Error {
             code: 1,

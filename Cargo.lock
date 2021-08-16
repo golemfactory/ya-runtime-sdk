@@ -74,6 +74,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "command-mode"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "serde",
+ "structopt",
+ "tokio",
+ "ya-runtime-sdk",
+]
+
+[[package]]
 name = "directories"
 version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -995,7 +1007,7 @@ dependencies = [
 
 [[package]]
 name = "ya-runtime-sdk"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "directories",

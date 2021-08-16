@@ -1,6 +1,7 @@
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
+use ya_runtime_sdk::error::Error;
 use ya_runtime_sdk::*;
 
 #[derive(StructOpt)]
@@ -59,8 +60,7 @@ impl Runtime for ExampleRuntime {
         use std::process::Stdio;
 
         if let RuntimeMode::Command = mode {
-            return futures::future::err(anyhow::anyhow!("Command mode is not supported").into())
-                .boxed_local();
+            return Error::response("Command mode is not supported");
         }
 
         // Echo the executed command and its arguments

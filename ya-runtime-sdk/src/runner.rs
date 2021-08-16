@@ -84,7 +84,12 @@ async fn inner<R: Runtime + 'static, E: Env + Send + 'static>(env: E) -> anyhow:
             let command = RunProcess {
                 bin,
                 args,
-                work_dir: ctx.cli.workdir().unwrap().display().to_string(),
+                work_dir: ctx
+                    .cli
+                    .workdir()
+                    .unwrap_or_else(Default::default)
+                    .to_string_lossy()
+                    .to_string(),
                 stdout: capture.clone(),
                 stderr: capture,
             };
@@ -93,7 +98,9 @@ async fn inner<R: Runtime + 'static, E: Env + Send + 'static>(env: E) -> anyhow:
                 .run_command(command, RuntimeMode::Command, &mut ctx)
                 .await?;
 
-            output(serde_json::json!(pid)).await?;
+            if let RuntimeMode::Server = R::MODE {
+                output(serde_json::json!(pid)).await?;
+            }
         }
         Command::OfferTemplate { .. } => {
             if let Some(template) = runtime.offer(&mut ctx).await? {
