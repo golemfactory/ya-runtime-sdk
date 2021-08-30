@@ -1002,7 +1002,8 @@ dependencies = [
 [[package]]
 name = "ya-runtime-api"
 version = "0.4.0"
-source = "git+https://github.com/golemfactory/yagna.git?rev=525e57f6b48f2a6582b12a1c7d0c0739a8c8c12d#525e57f6b48f2a6582b12a1c7d0c0739a8c8c12d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bc77db6082cda669d10377934749f03f97d8230f3dcb52e65f8b2576d4a4001"
 dependencies = [
  "anyhow",
  "bytes",

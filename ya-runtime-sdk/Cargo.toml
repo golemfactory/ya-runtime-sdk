@@ -15,8 +15,6 @@ macros = ["ya-runtime-sdk-derive"]
 [dependencies.ya-runtime-api]
 version = "0.4"
 features = ["codec"]
-git = "https://github.com/golemfactory/yagna.git"
-rev = "525e57f6b48f2a6582b12a1c7d0c0739a8c8c12d"
 
 [dependencies.ya-runtime-sdk-derive]
 version = "0.1"
