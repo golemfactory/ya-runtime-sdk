@@ -74,6 +74,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "command-mode"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "serde",
+ "structopt",
+ "tokio",
+ "ya-runtime-sdk",
+]
+
+[[package]]
 name = "custom-counters"
 version = "0.1.0"
 dependencies = [
