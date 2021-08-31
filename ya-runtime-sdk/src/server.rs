@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use futures::channel::oneshot;
 use futures::{FutureExt, TryFutureExt};
 use ya_runtime_api::server::proto::response::create_network::Endpoint;
 use ya_runtime_api::server::{
@@ -16,11 +17,36 @@ pub struct Server<R: Runtime> {
     pub(crate) ctx: Rc<RefCell<Context<R>>>,
 }
 
-impl<R: Runtime> Server<R> {
-    pub fn new(runtime: R, ctx: Context<R>) -> Self {
-        Self {
+impl<R: Runtime + 'static> Server<R> {
+    pub fn new(runtime: R, mut ctx: Context<R>) -> Self {
+        let (tx, rx) = oneshot::channel();
+        ctx.set_shutdown_tx(tx);
+
+        let server = Self {
             runtime: Rc::new(RefCell::new(runtime)),
             ctx: Rc::new(RefCell::new(ctx)),
+        };
+
+        server.shutdown_on(rx);
+        server
+    }
+
+    pub fn shutdown_on(&self, rx: oneshot::Receiver<()>) {
+        let server = self.clone();
+        tokio::task::spawn_local(rx.then(move |result| async move {
+            if result.is_ok() {
+                let _ = server.shutdown().await;
+                std::process::exit(0);
+            }
+        }));
+    }
+}
+
+impl<R: Runtime> Clone for Server<R> {
+    fn clone(&self) -> Self {
+        Self {
+            runtime: self.runtime.clone(),
+            ctx: self.ctx.clone(),
         }
     }
 }

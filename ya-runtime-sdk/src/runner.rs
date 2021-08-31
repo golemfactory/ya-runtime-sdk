@@ -57,13 +57,14 @@ async fn inner<R: Runtime + 'static, E: Env + Send + 'static>(env: E) -> anyhow:
                         runtime.start(&mut ctx)
                     };
 
-                    let mut cmd_ctx = crate::runtime::RunCommandContext {
-                        id: ctx.next_pid(),
-                        emitter: ctx.emitter.clone(),
-                    };
-
                     if let Some(out) = start.await.expect("Failed to start the runtime") {
-                        cmd_ctx.stdout(out.to_string()).await;
+                        crate::runtime::RunCommandContext {
+                            id: ctx.next_pid(),
+                            emitter: ctx.emitter.clone(),
+                            control: Default::default(),
+                        }
+                        .stdout(out.to_string())
+                        .await;
                     }
 
                     Server::new(runtime, ctx)

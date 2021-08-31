@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 
-use futures::channel::mpsc;
+use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, LocalBoxFuture};
 use futures::{Future, FutureExt, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -103,6 +103,20 @@ pub trait RuntimeDef {
     type Conf: Default + Serialize + for<'de> Deserialize<'de>;
 }
 
+/// Runtime control
+#[derive(Clone, Default)]
+pub struct RuntimeControl {
+    shutdown_tx: Rc<RefCell<Option<oneshot::Sender<()>>>>,
+}
+
+impl RuntimeControl {
+    pub fn shutdown(&mut self) {
+        if let Some(tx) = self.shutdown_tx.borrow_mut().take() {
+            let _ = tx.send(());
+        }
+    }
+}
+
 /// Runtime execution context
 pub struct Context<R: Runtime + ?Sized> {
     /// Command line parameters
@@ -118,6 +132,8 @@ pub struct Context<R: Runtime + ?Sized> {
     pub emitter: Option<EventEmitter>,
     /// Process ID sequence
     pid_seq: AtomicU64,
+    /// Runtime control
+    control: RuntimeControl,
 }
 
 impl<R: Runtime + ?Sized> Context<R> {
@@ -153,6 +169,7 @@ impl<R: Runtime + ?Sized> Context<R> {
             conf_path,
             emitter: None,
             pid_seq: Default::default(),
+            control: Default::default(),
         })
     }
 
@@ -204,6 +221,11 @@ impl<R: Runtime + ?Sized> Context<R> {
         Ok(())
     }
 
+    /// Return a runtime control object
+    pub fn control(&self) -> RuntimeControl {
+        self.control.clone()
+    }
+
     fn config_path<P: AsRef<Path>>(dir: P) -> anyhow::Result<PathBuf> {
         let dir = dir.as_ref();
         let candidates = Self::CONF_EXTENSIONS
@@ -227,6 +249,10 @@ impl<R: Runtime + ?Sized> Context<R> {
     pub(crate) fn set_emitter(&mut self, emitter: impl RuntimeHandler + Send + Sync + 'static) {
         self.emitter.replace(EventEmitter::spawn(emitter));
     }
+
+    pub(crate) fn set_shutdown_tx(&mut self, tx: oneshot::Sender<()>) {
+        self.control.shutdown_tx = Rc::new(RefCell::new(Some(tx)));
+    }
 }
 
 impl<R: Runtime + ?Sized> Context<R> {
@@ -237,8 +263,9 @@ impl<R: Runtime + ?Sized> Context<R> {
     {
         let pid = self.next_pid();
         let emitter = self.emitter.clone();
+        let control = self.control();
 
-        run_command(pid, emitter, move |run_ctx| {
+        run_command(pid, emitter, control, move |run_ctx| {
             async move { Ok(handler(run_ctx).await?) }.boxed_local()
         })
     }
@@ -277,10 +304,11 @@ where
     {
         let pid = ctx.next_pid();
         let emitter = ctx.emitter.clone();
+        let control = ctx.control();
 
         async move {
             let value = self.await?;
-            let fut = run_command(pid, emitter, move |run_ctx| async move {
+            let fut = run_command(pid, emitter, control, move |run_ctx| async move {
                 Ok(handler(value, run_ctx).await?)
             });
             Ok(fut.await?)
@@ -292,13 +320,18 @@ where
 fn run_command<'a, H, F>(
     pid: ProcessId,
     emitter: Option<EventEmitter>,
+    control: RuntimeControl,
     handler: H,
 ) -> ProcessIdResponse<'a>
 where
     H: (FnOnce(RunCommandContext) -> F) + 'static,
     F: Future<Output = Result<(), Error>> + 'static,
 {
-    let mut cmd_ctx = RunCommandContext { id: pid, emitter };
+    let mut cmd_ctx = RunCommandContext {
+        id: pid,
+        emitter,
+        control,
+    };
     async move {
         cmd_ctx.started().await;
 
@@ -318,6 +351,7 @@ where
 pub struct RunCommandContext {
     pub(crate) id: ProcessId,
     pub(crate) emitter: Option<EventEmitter>,
+    pub(crate) control: RuntimeControl,
 }
 
 impl RunCommandContext {
@@ -360,6 +394,11 @@ impl RunCommandContext {
             Some(ref mut e) => e.command_stderr(id, output),
             None => Self::print_output(output),
         }
+    }
+
+    /// Return runtime control object
+    pub fn control(&self) -> RuntimeControl {
+        self.control.clone()
     }
 
     fn print_output<'a>(output: impl IntoVec<u8>) -> BoxFuture<'a, ()> {
