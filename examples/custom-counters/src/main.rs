@@ -1,5 +1,5 @@
 use futures::future::{AbortHandle, Abortable};
-use futures::FutureExt;
+use futures::{FutureExt, TryFutureExt};
 use tokio::time::Duration;
 use ya_runtime_sdk::*;
 
@@ -67,11 +67,41 @@ impl Runtime for ExampleRuntime {
 
     fn run_command<'a>(
         &mut self,
-        _command: RunProcess,
+        command: RunProcess,
         _mode: RuntimeMode,
         ctx: &mut Context<Self>,
     ) -> ProcessIdResponse<'a> {
-        ctx.command(|_| async move { Ok(()) })
+        ctx.command(|mut run_ctx| {
+            async move {
+                match command.bin.as_str() {
+                    "sleep" => {
+                        let delay_str = command
+                            .args
+                            .get(1)
+                            .ok_or_else(|| anyhow::anyhow!("Missing delay value"))?;
+
+                        let delay_ms: u64 = delay_str.as_str().parse()?;
+                        let delay = Duration::from_millis(delay_ms);
+
+                        run_ctx
+                            .stdout(format!("Entering sleep for {}ms", delay_ms))
+                            .await;
+
+                        tokio::time::delay_for(delay).await;
+                        run_ctx.stdout("Done sleeping").await;
+                    }
+                    "stop" => {
+                        run_ctx.stdout("Stopping runtime").await;
+                        run_ctx.control().shutdown();
+                    }
+                    _ => {
+                        anyhow::bail!("Unsupported command {} {:?}", command.bin, command.args);
+                    }
+                }
+                Ok(())
+            }
+            .map_err(Into::into)
+        })
     }
 }
 
