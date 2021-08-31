@@ -16,6 +16,7 @@ use crate::common::IntoVec;
 use crate::env::{DefaultEnv, Env};
 use crate::error::Error;
 use crate::runtime_api::server::*;
+use crate::serialize::json;
 
 pub type ProcessId = u64;
 pub type EmptyResponse<'a> = LocalBoxFuture<'a, Result<(), Error>>;
@@ -393,6 +394,35 @@ impl RunCommandContext {
         match self.emitter {
             Some(ref mut e) => e.command_stderr(id, output),
             None => Self::print_output(output),
+        }
+    }
+
+    /// Emit a STATE event
+    pub fn state(&mut self, name: String, value: json::Value) -> BoxFuture<Result<(), Error>> {
+        match self.emitter {
+            Some(ref mut e) => async move {
+                let json_str = json::to_string(&value)
+                    .map_err(|e| anyhow::anyhow!("Serialization error: {}", e))?;
+                let json_bytes = json_str.into_bytes();
+
+                e.state(RuntimeState {
+                    name,
+                    value: json_bytes,
+                })
+                .await;
+
+                Ok(())
+            }
+            .boxed(),
+            None => futures::future::ok(()).boxed(),
+        }
+    }
+
+    /// Emit a COUNTER event
+    pub fn counter(&mut self, name: String, value: f64) -> BoxFuture<()> {
+        match self.emitter {
+            Some(ref mut e) => e.counter(RuntimeCounter { name, value }),
+            None => futures::future::ready(()).boxed(),
         }
     }
 
