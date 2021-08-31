@@ -143,14 +143,8 @@ The `Runtime` trait specifies handlers for each of the execution phases:
 
   Command was invoked by a runtime running in a `Server` mode.
 
-  The implementation **MUST** use the `emitter` to publish the following command lifecycle events:
-
-    - command started
-    - command output (if any)
-    - command error output (if any)
-    - command stopped
-
-  Developers may use the `RunCommandExt` trait to wrap the lifecycle and publish output events in a simpler manner.  
+  Developers may use the `RunCommandExt` trait or `Context::command` to wrap command execution and publish  
+  stdout, stderr and usage counter events in a simple manner.  
 
 - `Command`
 
@@ -243,6 +237,10 @@ The `Context` struct exposes the following properties:
 - `write_config`
 
   Write configuration to the specified path.
+
+- `control`
+
+  Return a runtime control object. Its `shutdown` method allows to terminate the runtime running in Server mode.
 
 ### Configuration
 
