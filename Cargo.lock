@@ -86,18 +86,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "custom-counters"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures",
- "serde",
- "structopt",
- "tokio",
- "ya-runtime-sdk",
-]
-
-[[package]]
 name = "directories"
 version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
