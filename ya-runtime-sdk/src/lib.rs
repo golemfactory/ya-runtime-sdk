@@ -1,6 +1,7 @@
 pub use ya_runtime_api as runtime_api;
 pub use ya_runtime_api::server::{
-    CreateNetwork, ErrorResponse, KillProcess, ProcessStatus, RunProcess,
+    CreateNetwork, ErrorResponse, KillProcess, ProcessStatus, RunProcess, RuntimeCounter,
+    RuntimeState, RuntimeStatus, RuntimeStatusKind,
 };
 
 pub use cli::Command;

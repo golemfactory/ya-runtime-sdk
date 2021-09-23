@@ -1,9 +1,11 @@
+use std::cell::RefCell;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 
-use futures::channel::mpsc;
+use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, LocalBoxFuture};
 use futures::{Future, FutureExt, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -13,8 +15,8 @@ use crate::cli::CommandCli;
 use crate::common::IntoVec;
 use crate::env::{DefaultEnv, Env};
 use crate::error::Error;
-use crate::runtime_api::server::RuntimeEvent;
-use crate::{CreateNetwork, KillProcess, ProcessStatus, RunProcess};
+use crate::runtime_api::server::*;
+use crate::serialize::json;
 
 pub type ProcessId = u64;
 pub type EmptyResponse<'a> = LocalBoxFuture<'a, Result<(), Error>>;
@@ -102,6 +104,20 @@ pub trait RuntimeDef {
     type Conf: Default + Serialize + for<'de> Deserialize<'de>;
 }
 
+/// Runtime control
+#[derive(Clone, Default)]
+pub struct RuntimeControl {
+    shutdown_tx: Rc<RefCell<Option<oneshot::Sender<()>>>>,
+}
+
+impl RuntimeControl {
+    pub fn shutdown(&mut self) {
+        if let Some(tx) = self.shutdown_tx.borrow_mut().take() {
+            let _ = tx.send(());
+        }
+    }
+}
+
 /// Runtime execution context
 pub struct Context<R: Runtime + ?Sized> {
     /// Command line parameters
@@ -117,6 +133,8 @@ pub struct Context<R: Runtime + ?Sized> {
     pub emitter: Option<EventEmitter>,
     /// Process ID sequence
     pid_seq: AtomicU64,
+    /// Runtime control
+    control: RuntimeControl,
 }
 
 impl<R: Runtime + ?Sized> Context<R> {
@@ -152,6 +170,7 @@ impl<R: Runtime + ?Sized> Context<R> {
             conf_path,
             emitter: None,
             pid_seq: Default::default(),
+            control: Default::default(),
         })
     }
 
@@ -203,6 +222,11 @@ impl<R: Runtime + ?Sized> Context<R> {
         Ok(())
     }
 
+    /// Return a runtime control object
+    pub fn control(&self) -> RuntimeControl {
+        self.control.clone()
+    }
+
     fn config_path<P: AsRef<Path>>(dir: P) -> anyhow::Result<PathBuf> {
         let dir = dir.as_ref();
         let candidates = Self::CONF_EXTENSIONS
@@ -223,8 +247,12 @@ impl<R: Runtime + ?Sized> Context<R> {
         self.pid_seq.fetch_add(1, Relaxed)
     }
 
-    pub(crate) fn set_emitter(&mut self, emitter: impl RuntimeEvent + Send + Sync + 'static) {
+    pub(crate) fn set_emitter(&mut self, emitter: impl RuntimeHandler + Send + Sync + 'static) {
         self.emitter.replace(EventEmitter::spawn(emitter));
+    }
+
+    pub(crate) fn set_shutdown_tx(&mut self, tx: oneshot::Sender<()>) {
+        self.control.shutdown_tx = Rc::new(RefCell::new(Some(tx)));
     }
 }
 
@@ -236,8 +264,9 @@ impl<R: Runtime + ?Sized> Context<R> {
     {
         let pid = self.next_pid();
         let emitter = self.emitter.clone();
+        let control = self.control();
 
-        run_command(pid, emitter, move |run_ctx| {
+        run_command(pid, emitter, control, move |run_ctx| {
             async move { Ok(handler(run_ctx).await?) }.boxed_local()
         })
     }
@@ -276,10 +305,11 @@ where
     {
         let pid = ctx.next_pid();
         let emitter = ctx.emitter.clone();
+        let control = ctx.control();
 
         async move {
             let value = self.await?;
-            let fut = run_command(pid, emitter, move |run_ctx| async move {
+            let fut = run_command(pid, emitter, control, move |run_ctx| async move {
                 Ok(handler(value, run_ctx).await?)
             });
             Ok(fut.await?)
@@ -291,13 +321,18 @@ where
 fn run_command<'a, H, F>(
     pid: ProcessId,
     emitter: Option<EventEmitter>,
+    control: RuntimeControl,
     handler: H,
 ) -> ProcessIdResponse<'a>
 where
     H: (FnOnce(RunCommandContext) -> F) + 'static,
     F: Future<Output = Result<(), Error>> + 'static,
 {
-    let mut cmd_ctx = RunCommandContext { id: pid, emitter };
+    let mut cmd_ctx = RunCommandContext {
+        id: pid,
+        emitter,
+        control,
+    };
     async move {
         cmd_ctx.started().await;
 
@@ -317,6 +352,7 @@ where
 pub struct RunCommandContext {
     pub(crate) id: ProcessId,
     pub(crate) emitter: Option<EventEmitter>,
+    pub(crate) control: RuntimeControl,
 }
 
 impl RunCommandContext {
@@ -361,6 +397,40 @@ impl RunCommandContext {
         }
     }
 
+    /// Emit a STATE event
+    pub fn state(&mut self, name: String, value: json::Value) -> BoxFuture<Result<(), Error>> {
+        match self.emitter {
+            Some(ref mut e) => async move {
+                let json_str = json::to_string(&value)
+                    .map_err(|e| anyhow::anyhow!("Serialization error: {}", e))?;
+                let json_bytes = json_str.into_bytes();
+
+                e.state(RuntimeState {
+                    name,
+                    value: json_bytes,
+                })
+                .await;
+
+                Ok(())
+            }
+            .boxed(),
+            None => futures::future::ok(()).boxed(),
+        }
+    }
+
+    /// Emit a COUNTER event
+    pub fn counter(&mut self, name: String, value: f64) -> BoxFuture<()> {
+        match self.emitter {
+            Some(ref mut e) => e.counter(RuntimeCounter { name, value }),
+            None => futures::future::ready(()).boxed(),
+        }
+    }
+
+    /// Return runtime control object
+    pub fn control(&self) -> RuntimeControl {
+        self.control.clone()
+    }
+
     fn print_output<'a>(output: impl IntoVec<u8>) -> BoxFuture<'a, ()> {
         let mut stdout = std::io::stdout();
         let _ = stdout.write_all(output.into_vec().as_slice());
@@ -369,17 +439,56 @@ impl RunCommandContext {
     }
 }
 
+/// Runtime event kind
+#[derive(Clone, Debug)]
+pub enum EventKind {
+    Process(ProcessStatus),
+    Runtime(RuntimeStatus),
+}
+
+impl From<ProcessStatus> for EventKind {
+    fn from(status: ProcessStatus) -> Self {
+        Self::Process(status)
+    }
+}
+
+impl From<RuntimeStatus> for EventKind {
+    fn from(status: RuntimeStatus) -> Self {
+        Self::Runtime(status)
+    }
+}
+
+impl From<RuntimeStatusKind> for EventKind {
+    fn from(kind: RuntimeStatusKind) -> Self {
+        Self::Runtime(RuntimeStatus { kind: Some(kind) })
+    }
+}
+
 /// Runtime event emitter
 #[derive(Clone)]
 pub struct EventEmitter {
-    tx: mpsc::Sender<ProcessStatus>,
+    tx_process: mpsc::Sender<ProcessStatus>,
+    tx_runtime: mpsc::Sender<RuntimeStatus>,
 }
 
 impl EventEmitter {
-    pub fn spawn(emitter: impl RuntimeEvent + Send + Sync + 'static) -> Self {
-        let (tx, rx) = mpsc::channel(1);
-        tokio::task::spawn(rx.for_each(move |status| emitter.on_process_status(status)));
-        Self { tx }
+    pub fn spawn(emitter: impl RuntimeHandler + 'static) -> Self {
+        let (tx_p, rx_p) = mpsc::channel(1);
+        let (tx_r, rx_r) = mpsc::channel(1);
+        let e_p = Rc::new(RefCell::new(emitter));
+        let e_r = e_p.clone();
+
+        tokio::task::spawn_local(
+            rx_p.for_each(move |status| e_p.borrow().on_process_status(status)),
+        );
+        tokio::task::spawn_local(
+            rx_r.for_each(move |status| e_r.borrow().on_runtime_status(status)),
+        );
+
+        Self {
+            tx_process: tx_p,
+            tx_runtime: tx_r,
+        }
     }
 }
 
@@ -436,9 +545,22 @@ impl EventEmitter {
         })
     }
 
+    /// Emit a state event
+    pub fn state(&mut self, state: RuntimeState) -> BoxFuture<()> {
+        self.emit(RuntimeStatusKind::State(state))
+    }
+
+    /// Emit a counter event
+    pub fn counter(&mut self, counter: RuntimeCounter) -> BoxFuture<()> {
+        self.emit(RuntimeStatusKind::Counter(counter))
+    }
+
     /// Emit an event
-    pub fn emit(&mut self, status: ProcessStatus) -> BoxFuture<()> {
-        self.tx.send(status).then(|_| async {}).boxed()
+    pub fn emit(&mut self, event: impl Into<EventKind>) -> BoxFuture<()> {
+        match event.into() {
+            EventKind::Process(status) => self.tx_process.send(status).then(|_| async {}).boxed(),
+            EventKind::Runtime(status) => self.tx_runtime.send(status).then(|_| async {}).boxed(),
+        }
     }
 }
 

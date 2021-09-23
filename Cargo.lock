@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "command-mode"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "futures",
@@ -989,9 +989,9 @@ dependencies = [
 
 [[package]]
 name = "ya-runtime-api"
-version = "0.3.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08f8f90a1856539076ef180880177dd6da0aca9392e6939b97871ab1f4bc7012"
+checksum = "1bc77db6082cda669d10377934749f03f97d8230f3dcb52e65f8b2576d4a4001"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1007,7 +1007,7 @@ dependencies = [
 
 [[package]]
 name = "ya-runtime-sdk"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "directories",
