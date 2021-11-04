@@ -5,3 +5,6 @@ members = [
     "examples/example-runtime",
     "examples/command-mode"
 ]
+
+[patch.crates-io]
+ya-runtime-api = { git = "https://github.com/golemfactory/yagna.git", rev = "a69fbd1317c48245c046de29ad8437729da9b3aa", optional = true }
