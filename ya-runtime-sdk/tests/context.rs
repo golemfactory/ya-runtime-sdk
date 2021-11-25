@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use ya_runtime_sdk::*;
 
+type RuntimeCli = <Runtime as RuntimeDef>::Cli;
+
 #[derive(structopt::StructOpt)]
 #[structopt(rename_all = "kebab-case")]
 pub struct Cli {
@@ -42,7 +44,7 @@ impl Default for Env {
     }
 }
 
-impl ya_runtime_sdk::env::Env for Env {
+impl ya_runtime_sdk::env::Env<RuntimeCli> for Env {
     fn data_directory(&self, _: &str) -> anyhow::Result<PathBuf> {
         Ok(self.temp_dir.path().to_path_buf())
     }

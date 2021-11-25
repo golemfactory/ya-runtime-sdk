@@ -1,18 +1,24 @@
 use tokio::io::AsyncWriteExt;
+
 use ya_runtime_api::server::proto::{output::Type, request::RunProcess, Output};
 
 use crate::cli::{Command, CommandCli};
 use crate::env::{DefaultEnv, Env};
 use crate::runtime::{Context, Runtime, RuntimeMode};
 use crate::server::Server;
+use crate::RuntimeDef;
 
 /// Starts the runtime
 pub async fn run<R: Runtime + 'static>() -> anyhow::Result<()> {
-    run_with::<R, _>(DefaultEnv::default()).await
+    run_with::<R, _>(DefaultEnv::<<R as RuntimeDef>::Cli>::default()).await
 }
 
 /// Starts the runtime using a custom environment configuration provider
-pub async fn run_with<R: Runtime + 'static, E: Env + Send + 'static>(env: E) -> anyhow::Result<()> {
+pub async fn run_with<R, E>(env: E) -> anyhow::Result<()>
+where
+    R: Runtime + 'static,
+    E: Env<<R as RuntimeDef>::Cli> + Send + 'static,
+{
     tokio::task::spawn_blocking(move || {
         let handle = tokio::runtime::Handle::current();
         handle.block_on(async {
@@ -23,7 +29,11 @@ pub async fn run_with<R: Runtime + 'static, E: Env + Send + 'static>(env: E) -> 
     .await?
 }
 
-async fn inner<R: Runtime + 'static, E: Env + Send + 'static>(env: E) -> anyhow::Result<()> {
+async fn inner<R, E>(env: E) -> anyhow::Result<()>
+where
+    R: Runtime + 'static,
+    E: Env<<R as RuntimeDef>::Cli> + Send + 'static,
+{
     let mut runtime = R::default();
     let mut ctx = Context::<R>::try_with(env)?;
 
