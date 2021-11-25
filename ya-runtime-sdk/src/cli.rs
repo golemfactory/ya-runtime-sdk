@@ -38,7 +38,7 @@ impl Command {
             | Self::Start { args }
             | Self::Run { args }
             | Self::OfferTemplate { args }
-            | Self::Test { args } => &args,
+            | Self::Test { args } => args,
         }
     }
 }
