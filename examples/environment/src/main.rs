@@ -18,7 +18,8 @@ pub struct ExampleEnv {
 #[derive(StructOpt)]
 #[structopt(rename_all = "kebab-case")]
 pub struct ExampleCli {
-    #[structopt(long)]
+    #[structopt(long = "name")]
+    flag_name: Option<String>,
     name: Option<String>,
 }
 
@@ -29,7 +30,16 @@ impl Env<RuntimeCli> for ExampleEnv {
 
     fn cli(&mut self, name: &str, version: &str) -> anyhow::Result<RuntimeCli> {
         let cli: RuntimeCli = parse_cli(name, version, self.args())?;
-        self.runtime_name = cli.runtime.name.clone();
+
+        if cli.runtime.flag_name.is_some() {
+            // set runtime name from a flag argument
+            self.runtime_name = cli.runtime.flag_name.clone();
+        }
+        if cli.runtime.name.is_some() {
+            // set runtime name from a positional argument
+            self.runtime_name = cli.runtime.name.clone();
+        }
+
         Ok(cli)
     }
 }
