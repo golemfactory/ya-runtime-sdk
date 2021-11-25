@@ -98,7 +98,7 @@ where
                 work_dir: ctx
                     .cli
                     .workdir()
-                    .unwrap_or_else(Default::default)
+                    .unwrap_or_default()
                     .to_string_lossy()
                     .to_string(),
                 stdout: capture.clone(),

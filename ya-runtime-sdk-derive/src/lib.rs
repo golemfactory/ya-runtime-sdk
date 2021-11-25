@@ -98,19 +98,14 @@ fn impl_mod(
     )
 }
 
-fn parse_attributes(attrs: &Vec<syn::Attribute>) -> HashSet<DefParam> {
+fn parse_attributes(attrs: &[syn::Attribute]) -> HashSet<DefParam> {
     attrs
         .iter()
         .map(|attr| (attr, attr.path.segments[0].ident.to_string()))
-        .filter(|(_, variant)| {
-            DefParam::VARIANTS
-                .iter()
-                .position(|v| *v == variant.as_str())
-                .is_some()
-        })
+        .filter(|(_, variant)| DefParam::VARIANTS.iter().any(|v| *v == variant.as_str()))
         .map(|(attr, variant)| {
             let ident = syn::parse2::<DefIdent>(attr.tokens.clone())
-                .expect(&format!("invalid value {}", variant));
+                .unwrap_or_else(|_| panic!("invalid value {}", variant));
             DefParam::new(&variant, ident.0)
         })
         .collect()
@@ -125,8 +120,8 @@ enum DefParam {
 impl DefParam {
     const VARIANTS: [&'static str; 2] = ["cli", "conf"];
 
-    fn new(variant: &String, ident: syn::Ident) -> Self {
-        match variant.as_str() {
+    fn new(variant: &str, ident: syn::Ident) -> Self {
+        match variant {
             "cli" => DefParam::Cli(ident),
             "conf" => DefParam::Conf(ident),
             _ => panic!("invalid attribute: {}", variant),

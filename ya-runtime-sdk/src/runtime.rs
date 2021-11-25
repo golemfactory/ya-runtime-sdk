@@ -230,8 +230,7 @@ impl<R: Runtime + ?Sized> Context<R> {
             .collect::<Vec<_>>();
         let conf_path = candidates
             .iter()
-            .filter(|path| path.exists())
-            .next()
+            .find(|path| path.exists())
             .unwrap_or_else(|| candidates.last().unwrap())
             .clone();
 
@@ -262,7 +261,7 @@ impl<R: Runtime + ?Sized> Context<R> {
         let control = self.control();
 
         run_command(pid, emitter, control, move |run_ctx| {
-            async move { Ok(handler(run_ctx).await?) }.boxed_local()
+            async move { handler(run_ctx).await }.boxed_local()
         })
     }
 }
@@ -274,6 +273,7 @@ impl<R: Runtime + ?Sized> Context<R> {
 pub trait RunCommandExt<R: Runtime + ?Sized> {
     type Item: 'static;
 
+    #[allow(clippy::wrong_self_convention)]
     /// Wrap `self` in `run_command`
     fn as_command<'a, H, Fh>(self, ctx: &mut Context<R>, handler: H) -> ProcessIdResponse<'a>
     where
@@ -304,10 +304,10 @@ where
 
         async move {
             let value = self.await?;
-            let fut = run_command(pid, emitter, control, move |run_ctx| async move {
-                Ok(handler(value, run_ctx).await?)
-            });
-            Ok(fut.await?)
+            run_command(pid, emitter, control, move |run_ctx| async move {
+                handler(value, run_ctx).await
+            })
+            .await
         }
         .boxed_local()
     }
