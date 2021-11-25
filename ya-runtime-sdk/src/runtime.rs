@@ -9,7 +9,6 @@ use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, LocalBoxFuture};
 use futures::{Future, FutureExt, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use structopt::StructOpt;
 
 use crate::cli::CommandCli;
 use crate::common::IntoVec;
@@ -146,15 +145,11 @@ impl<R: Runtime + ?Sized> Context<R> {
     }
 
     /// Create a new instance with provided environment configuration
-    pub fn try_with<E: Env>(env: E) -> anyhow::Result<Self> {
-        let app = <R as RuntimeDef>::Cli::clap()
-            .name(R::NAME)
-            .version(R::VERSION);
-
-        let cli = <R as RuntimeDef>::Cli::from_clap(&app.get_matches_from(env.args()));
-
-        let conf_dir = env.data_directory(R::NAME)?;
-        let conf_path = Self::config_path(conf_dir)?;
+    pub fn try_with<E: Env<<R as RuntimeDef>::Cli>>(mut env: E) -> anyhow::Result<Self> {
+        let cli = env.cli(R::NAME, R::VERSION)?;
+        let name = env.runtime_name().unwrap_or_else(|| R::NAME.to_string());
+        let conf_dir = env.data_directory(name.as_str())?;
+        let conf_path = Self::config_path(conf_dir, name.as_str())?;
 
         let conf = if conf_path.exists() {
             Self::read_config(&conf_path)?
@@ -227,11 +222,11 @@ impl<R: Runtime + ?Sized> Context<R> {
         self.control.clone()
     }
 
-    fn config_path<P: AsRef<Path>>(dir: P) -> anyhow::Result<PathBuf> {
+    fn config_path<P: AsRef<Path>>(dir: P, name: &str) -> anyhow::Result<PathBuf> {
         let dir = dir.as_ref();
         let candidates = Self::CONF_EXTENSIONS
             .iter()
-            .map(|ext| dir.join(format!("{}.{}", R::NAME, ext)))
+            .map(|ext| dir.join(format!("{}.{}", name, ext)))
             .collect::<Vec<_>>();
         let conf_path = candidates
             .iter()

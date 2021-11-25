@@ -118,6 +118,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
+name = "environment"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "serde",
+ "structopt",
+ "tokio",
+ "ya-runtime-sdk",
+]
+
+[[package]]
 name = "example-runtime"
 version = "1.2.3"
 dependencies = [
@@ -1006,7 +1018,7 @@ dependencies = [
 
 [[package]]
 name = "ya-runtime-sdk"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "directories",
