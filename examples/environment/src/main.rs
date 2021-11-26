@@ -28,8 +28,8 @@ impl Env<RuntimeCli> for ExampleEnv {
         self.runtime_name.clone()
     }
 
-    fn cli(&mut self, name: &str, version: &str) -> anyhow::Result<RuntimeCli> {
-        let cli: RuntimeCli = parse_cli(name, version, self.args())?;
+    fn cli(&mut self, project_name: &str, project_version: &str) -> anyhow::Result<RuntimeCli> {
+        let cli: RuntimeCli = parse_cli(project_name, project_version, self.args())?;
 
         if cli.runtime.flag_name.is_some() {
             // set runtime name from a flag argument
