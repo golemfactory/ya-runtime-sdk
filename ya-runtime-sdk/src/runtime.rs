@@ -125,6 +125,8 @@ pub struct Context<R: Runtime + ?Sized> {
     pub conf: <R as RuntimeDef>::Conf,
     /// Configuration file path
     pub conf_path: PathBuf,
+    /// Environment instance
+    pub env: Box<dyn Env<<R as RuntimeDef>::Cli>>,
     /// Event emitter, available when
     /// `Runtime::MODE == RuntimeMode::Server`
     /// and
@@ -136,7 +138,11 @@ pub struct Context<R: Runtime + ?Sized> {
     control: RuntimeControl,
 }
 
-impl<R: Runtime + ?Sized> Context<R> {
+impl<R> Context<R>
+where
+    R: Runtime + ?Sized,
+    <R as RuntimeDef>::Cli: 'static,
+{
     const CONF_EXTENSIONS: [&'static str; 4] = ["toml", "yaml", "yml", "json"];
 
     /// Create a new instance with a default environment configuration
@@ -145,7 +151,10 @@ impl<R: Runtime + ?Sized> Context<R> {
     }
 
     /// Create a new instance with provided environment configuration
-    pub fn try_with<E: Env<<R as RuntimeDef>::Cli>>(mut env: E) -> anyhow::Result<Self> {
+    pub fn try_with<E>(mut env: E) -> anyhow::Result<Self>
+    where
+        E: Env<<R as RuntimeDef>::Cli> + 'static,
+    {
         let cli = env.cli(R::NAME, R::VERSION)?;
         let name = env.runtime_name().unwrap_or_else(|| R::NAME.to_string());
         let conf_dir = env.data_directory(name.as_str())?;
@@ -154,15 +163,14 @@ impl<R: Runtime + ?Sized> Context<R> {
         let conf = if conf_path.exists() {
             Self::read_config(&conf_path)?
         } else {
-            let conf = Default::default();
-            Self::write_config(&conf, &conf_path)?;
-            conf
+            Default::default()
         };
 
         Ok(Self {
             cli,
             conf,
             conf_path,
+            env: Box::new(env),
             emitter: None,
             pid_seq: Default::default(),
             control: Default::default(),
@@ -250,7 +258,11 @@ impl<R: Runtime + ?Sized> Context<R> {
     }
 }
 
-impl<R: Runtime + ?Sized> Context<R> {
+impl<R> Context<R>
+where
+    R: Runtime + ?Sized,
+    <R as RuntimeDef>::Cli: 'static,
+{
     pub fn command<'a, H, Fh>(&mut self, handler: H) -> ProcessIdResponse<'a>
     where
         H: (FnOnce(RunCommandContext) -> Fh) + 'static,
@@ -286,6 +298,7 @@ pub trait RunCommandExt<R: Runtime + ?Sized> {
 impl<R, F, Rt, Re> RunCommandExt<R> for F
 where
     R: Runtime + ?Sized,
+    <R as RuntimeDef>::Cli: 'static,
     F: Future<Output = Result<Rt, Re>> + 'static,
     Rt: 'static,
     Re: 'static,
