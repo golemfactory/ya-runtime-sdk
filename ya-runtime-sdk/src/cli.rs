@@ -1,7 +1,17 @@
 use std::path::PathBuf;
 use structopt::{clap, StructOpt};
 
-pub trait CommandCli: StructOpt {
+pub fn parse_cli<C: CommandCli>(
+    name: &str,
+    version: &str,
+    args: Box<dyn Iterator<Item = String>>,
+) -> anyhow::Result<C> {
+    let app = C::clap().name(name).version(version);
+    let iter = &app.get_matches_from(args);
+    Ok(C::from_clap(iter))
+}
+
+pub trait CommandCli: StructOpt + Send {
     fn workdir(&self) -> Option<PathBuf>;
     fn command(&self) -> &Command;
 }
@@ -28,7 +38,7 @@ impl Command {
             | Self::Start { args }
             | Self::Run { args }
             | Self::OfferTemplate { args }
-            | Self::Test { args } => &args,
+            | Self::Test { args } => args,
         }
     }
 }

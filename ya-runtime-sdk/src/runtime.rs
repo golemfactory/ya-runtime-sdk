@@ -9,7 +9,6 @@ use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, LocalBoxFuture};
 use futures::{Future, FutureExt, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use structopt::StructOpt;
 
 use crate::cli::CommandCli;
 use crate::common::IntoVec;
@@ -126,6 +125,8 @@ pub struct Context<R: Runtime + ?Sized> {
     pub conf: <R as RuntimeDef>::Conf,
     /// Configuration file path
     pub conf_path: PathBuf,
+    /// Environment instance
+    pub env: Box<dyn Env<<R as RuntimeDef>::Cli>>,
     /// Event emitter, available when
     /// `Runtime::MODE == RuntimeMode::Server`
     /// and
@@ -137,7 +138,11 @@ pub struct Context<R: Runtime + ?Sized> {
     control: RuntimeControl,
 }
 
-impl<R: Runtime + ?Sized> Context<R> {
+impl<R> Context<R>
+where
+    R: Runtime + ?Sized,
+    <R as RuntimeDef>::Cli: 'static,
+{
     const CONF_EXTENSIONS: [&'static str; 4] = ["toml", "yaml", "yml", "json"];
 
     /// Create a new instance with a default environment configuration
@@ -146,28 +151,26 @@ impl<R: Runtime + ?Sized> Context<R> {
     }
 
     /// Create a new instance with provided environment configuration
-    pub fn try_with<E: Env>(env: E) -> anyhow::Result<Self> {
-        let app = <R as RuntimeDef>::Cli::clap()
-            .name(R::NAME)
-            .version(R::VERSION);
-
-        let cli = <R as RuntimeDef>::Cli::from_clap(&app.get_matches_from(env.args()));
-
-        let conf_dir = env.data_directory(R::NAME)?;
-        let conf_path = Self::config_path(conf_dir)?;
+    pub fn try_with<E>(mut env: E) -> anyhow::Result<Self>
+    where
+        E: Env<<R as RuntimeDef>::Cli> + 'static,
+    {
+        let cli = env.cli(R::NAME, R::VERSION)?;
+        let name = env.runtime_name().unwrap_or_else(|| R::NAME.to_string());
+        let conf_dir = env.data_directory(name.as_str())?;
+        let conf_path = Self::config_path(conf_dir, name.as_str())?;
 
         let conf = if conf_path.exists() {
             Self::read_config(&conf_path)?
         } else {
-            let conf = Default::default();
-            Self::write_config(&conf, &conf_path)?;
-            conf
+            Default::default()
         };
 
         Ok(Self {
             cli,
             conf,
             conf_path,
+            env: Box::new(env),
             emitter: None,
             pid_seq: Default::default(),
             control: Default::default(),
@@ -227,16 +230,15 @@ impl<R: Runtime + ?Sized> Context<R> {
         self.control.clone()
     }
 
-    fn config_path<P: AsRef<Path>>(dir: P) -> anyhow::Result<PathBuf> {
+    fn config_path<P: AsRef<Path>>(dir: P, name: &str) -> anyhow::Result<PathBuf> {
         let dir = dir.as_ref();
         let candidates = Self::CONF_EXTENSIONS
             .iter()
-            .map(|ext| dir.join(format!("{}.{}", R::NAME, ext)))
+            .map(|ext| dir.join(format!("{}.{}", name, ext)))
             .collect::<Vec<_>>();
         let conf_path = candidates
             .iter()
-            .filter(|path| path.exists())
-            .next()
+            .find(|path| path.exists())
             .unwrap_or_else(|| candidates.last().unwrap())
             .clone();
 
@@ -256,7 +258,11 @@ impl<R: Runtime + ?Sized> Context<R> {
     }
 }
 
-impl<R: Runtime + ?Sized> Context<R> {
+impl<R> Context<R>
+where
+    R: Runtime + ?Sized,
+    <R as RuntimeDef>::Cli: 'static,
+{
     pub fn command<'a, H, Fh>(&mut self, handler: H) -> ProcessIdResponse<'a>
     where
         H: (FnOnce(RunCommandContext) -> Fh) + 'static,
@@ -267,7 +273,7 @@ impl<R: Runtime + ?Sized> Context<R> {
         let control = self.control();
 
         run_command(pid, emitter, control, move |run_ctx| {
-            async move { Ok(handler(run_ctx).await?) }.boxed_local()
+            async move { handler(run_ctx).await }.boxed_local()
         })
     }
 }
@@ -279,6 +285,7 @@ impl<R: Runtime + ?Sized> Context<R> {
 pub trait RunCommandExt<R: Runtime + ?Sized> {
     type Item: 'static;
 
+    #[allow(clippy::wrong_self_convention)]
     /// Wrap `self` in `run_command`
     fn as_command<'a, H, Fh>(self, ctx: &mut Context<R>, handler: H) -> ProcessIdResponse<'a>
     where
@@ -291,6 +298,7 @@ pub trait RunCommandExt<R: Runtime + ?Sized> {
 impl<R, F, Rt, Re> RunCommandExt<R> for F
 where
     R: Runtime + ?Sized,
+    <R as RuntimeDef>::Cli: 'static,
     F: Future<Output = Result<Rt, Re>> + 'static,
     Rt: 'static,
     Re: 'static,
@@ -309,10 +317,10 @@ where
 
         async move {
             let value = self.await?;
-            let fut = run_command(pid, emitter, control, move |run_ctx| async move {
-                Ok(handler(value, run_ctx).await?)
-            });
-            Ok(fut.await?)
+            run_command(pid, emitter, control, move |run_ctx| async move {
+                handler(value, run_ctx).await
+            })
+            .await
         }
         .boxed_local()
     }

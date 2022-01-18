@@ -54,12 +54,12 @@ impl From<ErrorResponse> for Error {
     }
 }
 
-impl Into<ErrorResponse> for Error {
-    fn into(self) -> ErrorResponse {
+impl From<Error> for ErrorResponse {
+    fn from(e: Error) -> Self {
         ErrorResponse {
-            code: self.code,
-            message: self.message,
-            context: self.context,
+            code: e.code,
+            message: e.message,
+            context: e.context,
         }
     }
 }
