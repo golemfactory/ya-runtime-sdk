@@ -8,28 +8,26 @@ use crate::runtime::{Context, Runtime, RuntimeMode};
 use crate::server::Server;
 use crate::RuntimeDef;
 
-/// Starts the runtime
+/// Starts the runtime in a new `tokio::task::LocalSet`
+#[inline]
 pub async fn run<R: Runtime + 'static>() -> anyhow::Result<()> {
     run_with::<R, _>(DefaultEnv::<<R as RuntimeDef>::Cli>::default()).await
 }
 
-/// Starts the runtime using a custom environment configuration provider
+/// Starts the runtime in a new `tokio::task::LocalSet`,
+/// using a custom environment configuration provider
 pub async fn run_with<R, E>(env: E) -> anyhow::Result<()>
 where
     R: Runtime + 'static,
     E: Env<<R as RuntimeDef>::Cli> + Send + 'static,
 {
-    tokio::task::spawn_blocking(move || {
-        let handle = tokio::runtime::Handle::current();
-        handle.block_on(async {
-            let set = tokio::task::LocalSet::new();
-            set.run_until(inner::<R, E>(env)).await
-        })
-    })
-    .await?
+    let set = tokio::task::LocalSet::new();
+    set.run_until(run_local_with::<R, E>(env)).await
 }
 
-async fn inner<R, E>(env: E) -> anyhow::Result<()>
+/// Starts the runtime within a pre-configured async runtime,
+/// using a custom environment configuration provider
+pub async fn run_local_with<R, E>(env: E) -> anyhow::Result<()>
 where
     R: Runtime + 'static,
     E: Env<<R as RuntimeDef>::Cli> + Send + 'static,
