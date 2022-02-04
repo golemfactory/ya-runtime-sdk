@@ -10,7 +10,10 @@ use crate::RuntimeDef;
 
 /// Starts the runtime in a new `tokio::task::LocalSet`
 #[inline]
-pub async fn run<R: Runtime + 'static>() -> anyhow::Result<()> {
+pub async fn run<R>() -> anyhow::Result<()>
+where
+    R: Runtime + Default + 'static,
+{
     run_with::<R, _>(DefaultEnv::<<R as RuntimeDef>::Cli>::default()).await
 }
 
@@ -18,18 +21,16 @@ pub async fn run<R: Runtime + 'static>() -> anyhow::Result<()> {
 /// using a custom environment configuration provider
 pub async fn run_with<R, E>(env: E) -> anyhow::Result<()>
 where
-    R: Runtime + 'static,
+    R: Runtime + Default + 'static,
     E: Env<<R as RuntimeDef>::Cli> + Send + 'static,
 {
     let set = tokio::task::LocalSet::new();
-    set.run_until(run_local_with::<R, E>(env)).await
+    set.run_until(inner::<R, E>(env)).await
 }
 
-/// Starts the runtime within a pre-configured async runtime,
-/// using a custom environment configuration provider
-pub async fn run_local_with<R, E>(env: E) -> anyhow::Result<()>
+async fn inner<R, E>(env: E) -> anyhow::Result<()>
 where
-    R: Runtime + 'static,
+    R: Runtime + Default + 'static,
     E: Env<<R as RuntimeDef>::Cli> + Send + 'static,
 {
     let mut runtime = R::default();

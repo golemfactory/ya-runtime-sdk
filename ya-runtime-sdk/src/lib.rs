@@ -5,7 +5,7 @@ pub use ya_runtime_api::server::{
 };
 
 pub use cli::Command;
-pub use runner::{run, run_local_with, run_with};
+pub use runner::{run, run_with};
 pub use runtime::*;
 
 pub mod cli;

@@ -24,7 +24,7 @@ pub type EndpointResponse<'a> = LocalBoxFuture<'a, Result<String, Error>>;
 pub type ProcessIdResponse<'a> = LocalBoxFuture<'a, Result<ProcessId, Error>>;
 
 /// Command handling interface for runtimes
-pub trait Runtime: RuntimeDef + Default {
+pub trait Runtime: RuntimeDef {
     const MODE: RuntimeMode = RuntimeMode::Server;
 
     /// Deploy and configure the runtime
