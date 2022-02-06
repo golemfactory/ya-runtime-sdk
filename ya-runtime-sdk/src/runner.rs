@@ -1,3 +1,6 @@
+use futures::future::LocalBoxFuture;
+use futures::FutureExt;
+use std::future::Future;
 use tokio::io::AsyncWriteExt;
 
 use ya_runtime_api::server::proto::{output::Type, request::RunProcess, Output};
@@ -8,7 +11,7 @@ use crate::runtime::{Context, Runtime, RuntimeMode};
 use crate::server::Server;
 use crate::RuntimeDef;
 
-/// Starts the runtime in a new `tokio::task::LocalSet`
+/// Starts the runtime within a new `tokio::task::LocalSet`
 #[inline]
 pub async fn run<R>() -> anyhow::Result<()>
 where
@@ -17,24 +20,43 @@ where
     run_with::<R, _>(DefaultEnv::<<R as RuntimeDef>::Cli>::default()).await
 }
 
-/// Starts the runtime in a new `tokio::task::LocalSet`,
+/// Starts the runtime within a new `tokio::task::LocalSet`,
 /// using a custom environment configuration provider
 pub async fn run_with<R, E>(env: E) -> anyhow::Result<()>
 where
     R: Runtime + Default + 'static,
     E: Env<<R as RuntimeDef>::Cli> + Send + 'static,
 {
-    let set = tokio::task::LocalSet::new();
-    set.run_until(inner::<R, E>(env)).await
+    build(env, move |_| async move { Ok(R::default()) }).await
 }
 
-async fn inner<R, E>(env: E) -> anyhow::Result<()>
+/// Creates a new runtime execution future within a new `tokio::task::LocalSet`,
+/// using a custom environment configuration provider and a runtime factory
+pub fn build<R, E, F, Fut>(env: E, factory: F) -> LocalBoxFuture<'static, anyhow::Result<()>>
 where
-    R: Runtime + Default + 'static,
+    R: Runtime + 'static,
     E: Env<<R as RuntimeDef>::Cli> + Send + 'static,
+    F: FnOnce(&mut Context<R>) -> Fut + 'static,
+    Fut: Future<Output = anyhow::Result<R>> + 'static,
 {
-    let mut runtime = R::default();
+    async move {
+        let set = tokio::task::LocalSet::new();
+        set.run_until(inner::<R, E, _>(env, |ctx| {
+            async move { factory(ctx).await }.boxed_local()
+        }))
+        .await
+    }
+    .boxed_local()
+}
+
+async fn inner<R, E, F>(env: E, factory: F) -> anyhow::Result<()>
+where
+    R: Runtime + 'static,
+    E: Env<<R as RuntimeDef>::Cli> + Send + 'static,
+    F: FnOnce(&mut Context<R>) -> LocalBoxFuture<anyhow::Result<R>>,
+{
     let mut ctx = Context::<R>::try_with(env)?;
+    let mut runtime = factory(&mut ctx).await?;
 
     match ctx.cli.command() {
         Command::Deploy { .. } => {
