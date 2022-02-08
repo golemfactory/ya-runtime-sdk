@@ -6,8 +6,9 @@ use tokio::io::AsyncWriteExt;
 use ya_runtime_api::server::proto::{output::Type, request::RunProcess, Output};
 
 use crate::cli::{Command, CommandCli};
+use crate::context::Context;
 use crate::env::{DefaultEnv, Env};
-use crate::runtime::{Context, Runtime, RuntimeMode};
+use crate::runtime::{Runtime, RuntimeMode};
 use crate::server::Server;
 use crate::RuntimeDef;
 
@@ -89,7 +90,7 @@ where
                     };
 
                     if let Some(out) = start.await.expect("Failed to start the runtime") {
-                        crate::runtime::RunCommandContext {
+                        crate::context::RunCommandContext {
                             id: ctx.next_pid(),
                             emitter: ctx.emitter.clone(),
                             control: Default::default(),
