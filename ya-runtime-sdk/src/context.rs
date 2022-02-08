@@ -1,6 +1,7 @@
 use futures::channel::oneshot;
 use futures::future::BoxFuture;
 use futures::FutureExt;
+use serde::Serialize;
 use std::cell::RefCell;
 use std::future::Future;
 use std::io::Write;
@@ -11,13 +12,14 @@ use std::sync::atomic::Ordering::Relaxed;
 
 use ya_runtime_api::server::{RuntimeCounter, RuntimeHandler, RuntimeState};
 
-use crate::common::IntoVec;
+use crate::common::{write_output, IntoVec};
 use crate::env::{DefaultEnv, Env};
 use crate::error::Error;
 use crate::event::EventEmitter;
 use crate::runtime::{ProcessId, ProcessIdResponse};
 use crate::runtime::{Runtime, RuntimeControl, RuntimeDef};
 use crate::serialize::json;
+use crate::RuntimeMode;
 
 /// Runtime execution context
 pub struct Context<R: Runtime + ?Sized> {
@@ -147,8 +149,13 @@ where
         Ok(conf_path)
     }
 
-    pub(crate) fn next_pid(&self) -> ProcessId {
-        self.pid_seq.fetch_add(1, Relaxed)
+    pub(crate) fn next_run_ctx(&self) -> RunCommandContext {
+        let id = self.pid_seq.fetch_add(1, Relaxed);
+        RunCommandContext {
+            id,
+            emitter: self.emitter.clone(),
+            control: self.control.clone(),
+        }
     }
 
     pub(crate) fn set_emitter(&mut self, emitter: impl RuntimeHandler + Send + Sync + 'static) {
@@ -165,17 +172,36 @@ where
     R: Runtime + ?Sized,
     <R as RuntimeDef>::Cli: 'static,
 {
-    pub fn command<'a, H, Fh>(&mut self, handler: H) -> ProcessIdResponse<'a>
+    pub fn command<'a, H, T, Fut>(&mut self, handler: H) -> ProcessIdResponse<'a>
     where
-        H: (FnOnce(RunCommandContext) -> Fh) + 'static,
-        Fh: Future<Output = Result<(), Error>> + 'a,
+        H: (FnOnce(RunCommandContext) -> Fut) + 'static,
+        T: Serialize,
+        Fut: Future<Output = Result<T, Error>> + 'a,
     {
-        let pid = self.next_pid();
-        let emitter = self.emitter.clone();
-        let control = self.control();
+        let run_ctx = self.next_run_ctx();
+        run_command(run_ctx, move |run_ctx| {
+            async move {
+                let id = run_ctx.id;
+                let emitter = run_ctx.emitter.clone();
+                let output = handler(run_ctx).await?;
+                let value = json::to_value(&output).map_err(Error::from_string)?;
 
-        run_command(pid, emitter, control, move |run_ctx| {
-            async move { handler(run_ctx).await }.boxed_local()
+                if value.is_null() {
+                    return Ok(());
+                }
+
+                match R::MODE {
+                    RuntimeMode::Command => {
+                        let _ = write_output(value).await;
+                    }
+                    RuntimeMode::Server if emitter.is_some() => {
+                        emitter.unwrap().command_stdout(id, value.to_string()).await;
+                    }
+                    RuntimeMode::Server => (),
+                }
+                Ok(())
+            }
+            .boxed_local()
         })
     }
 }
@@ -305,13 +331,10 @@ where
         H: (FnOnce(Self::Item, RunCommandContext) -> Fh) + 'static,
         Fh: Future<Output = Result<(), Error>> + 'static,
     {
-        let pid = ctx.next_pid();
-        let emitter = ctx.emitter.clone();
-        let control = ctx.control();
-
+        let run_ctx = ctx.next_run_ctx();
         async move {
             let value = self.await?;
-            run_command(pid, emitter, control, move |run_ctx| async move {
+            run_command(run_ctx, move |run_ctx| async move {
                 handler(value, run_ctx).await
             })
             .await
@@ -320,28 +343,19 @@ where
     }
 }
 
-fn run_command<'a, H, F>(
-    pid: ProcessId,
-    emitter: Option<EventEmitter>,
-    control: RuntimeControl,
-    handler: H,
-) -> ProcessIdResponse<'a>
+fn run_command<'a, H, F>(mut run_ctx: RunCommandContext, handler: H) -> ProcessIdResponse<'a>
 where
     H: (FnOnce(RunCommandContext) -> F) + 'static,
     F: Future<Output = Result<(), Error>> + 'static,
 {
-    let mut cmd_ctx = RunCommandContext {
-        id: pid,
-        emitter,
-        control,
-    };
     async move {
-        cmd_ctx.started().await;
+        let pid = run_ctx.id;
+        run_ctx.started().await;
 
-        let fut = handler(cmd_ctx.clone());
+        let fut = handler(run_ctx.clone());
         tokio::task::spawn_local(async move {
             let return_code = fut.await.is_err() as i32;
-            cmd_ctx.stopped(return_code).await;
+            run_ctx.stopped(return_code).await;
         });
 
         Ok(pid)

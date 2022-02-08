@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use tokio::io::AsyncWriteExt;
 
 pub trait IntoVec<T> {
     fn into_vec(self) -> Vec<T>;
@@ -38,4 +39,12 @@ impl<'a> IntoVec<u8> for Cow<'a, str> {
     fn into_vec(self) -> Vec<u8> {
         self.as_bytes().to_vec()
     }
+}
+
+pub(crate) async fn write_output(json: serde_json::Value) -> anyhow::Result<()> {
+    let string = json.to_string();
+    let mut stdout = tokio::io::stdout();
+    stdout.write_all(string.as_bytes()).await?;
+    stdout.flush().await?;
+    Ok(())
 }
