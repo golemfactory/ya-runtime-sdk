@@ -1,12 +1,13 @@
 [package]
 name = "ya-runtime-sdk"
-description = "Facilitates creating new runtimes for Yagna"
+description = "Facilitates creation of new runtimes for Yagna"
 version = "0.2.1"
 authors = ["Golem Factory <contact@golem.network>"]
 edition = "2018"
 license = "GPL-3.0"
 homepage = "https://github.com/golemfactory/ya-runtime-sdk"
 repository = "https://github.com/golemfactory/ya-runtime-sdk"
+readme = "../README.md"
 
 [features]
 default = []
