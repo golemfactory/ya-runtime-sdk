@@ -21,9 +21,11 @@ pub trait Env<C: CommandCli> {
     }
 
     /// Parse command line arguments
-    fn cli(&mut self, name: &str, version: &str) -> anyhow::Result<C> {
-        let name = self.runtime_name().unwrap_or_else(|| name.to_string());
-        parse_cli(&name, version, self.args())
+    fn cli(&mut self, project_name: &str, project_version: &str) -> anyhow::Result<C> {
+        let name = self
+            .runtime_name()
+            .unwrap_or_else(|| project_name.to_string());
+        parse_cli(&name, project_version, self.args())
     }
 }
 

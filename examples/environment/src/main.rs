@@ -18,7 +18,6 @@ pub struct ExampleEnv {
 #[derive(StructOpt)]
 #[structopt(rename_all = "kebab-case")]
 pub struct ExampleCli {
-    #[structopt(long)]
     name: Option<String>,
 }
 
@@ -27,9 +26,14 @@ impl Env<RuntimeCli> for ExampleEnv {
         self.runtime_name.clone()
     }
 
-    fn cli(&mut self, name: &str, version: &str) -> anyhow::Result<RuntimeCli> {
-        let cli: RuntimeCli = parse_cli(name, version, self.args())?;
-        self.runtime_name = cli.runtime.name.clone();
+    fn cli(&mut self, project_name: &str, project_version: &str) -> anyhow::Result<RuntimeCli> {
+        let cli: RuntimeCli = parse_cli(project_name, project_version, self.args())?;
+
+        if cli.runtime.name.is_some() {
+            // set runtime name from a positional argument
+            self.runtime_name = cli.runtime.name.clone();
+        }
+
         Ok(cli)
     }
 }

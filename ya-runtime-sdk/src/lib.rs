@@ -5,13 +5,17 @@ pub use ya_runtime_api::server::{
 };
 
 pub use cli::Command;
-pub use runner::{run, run_with};
+pub use context::{Context, RunCommandContext, RunCommandExt};
+pub use event::{EventEmitter, EventKind};
+pub use runner::{build, run, run_with};
 pub use runtime::*;
 
 pub mod cli;
 mod common;
+mod context;
 pub mod env;
 pub mod error;
+mod event;
 mod runner;
 mod runtime;
 pub mod serialize;

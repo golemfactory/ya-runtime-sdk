@@ -223,6 +223,10 @@ The `Context` struct exposes the following properties:
 
   Path to the configuration file on a local filesystem
 
+- `env`
+
+  An object implementing the `Env` (environment settings) trait
+
 - `emitter`
 
   Command event emitter
@@ -245,8 +249,7 @@ The `Context` struct exposes the following properties:
 ### Configuration
 
 Configuration struct can be set via a `#[conf(..)]` attribute of the `RuntimeDef` derive macro. On runtime startup, 
-configuration is read from a file located at `~/.local/share/<crate_name>/<crate_name>.<format>` and
-serialized to disk with default values when missing.
+configuration is read from a file located at `~/.local/share/<crate_name>/<crate_name>.<format>`.
 
 ## Debugging
 
