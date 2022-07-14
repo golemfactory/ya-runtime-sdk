@@ -991,3 +991,8 @@ checksum = "56c1936c4cc7a1c9ab21a1ebb602eb942ba868cbd44a99cb7cdc5892335e1c85"
 dependencies = [
  "linked-hash-map",
 ]
+
+[[patch.unused]]
+name = "ya-runtime-api"
+version = "0.4.1"
+source = "git+https://github.com/golemfactory/yagna.git?rev=862cc71361fb4ac6d438a93bb43dd472648bb51e#862cc71361fb4ac6d438a93bb43dd472648bb51e"
