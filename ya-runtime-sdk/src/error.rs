@@ -6,6 +6,31 @@ use std::io;
 
 use crate::ErrorResponse;
 
+pub trait ErrorExt<T> {
+    fn or_err(self, s: impl ToString) -> Result<T, Error>;
+}
+
+impl<T> ErrorExt<T> for Option<T> {
+    fn or_err(self, s: impl ToString) -> Result<T, Error> {
+        match self {
+            Some(t) => Ok(t),
+            None => Err(Error::from(s.to_string())),
+        }
+    }
+}
+
+impl<T, E> ErrorExt<T> for Result<T, E>
+where
+    E: Into<Error> + std::fmt::Display,
+{
+    fn or_err(self, s: impl ToString) -> Result<T, Error> {
+        match self {
+            Ok(t) => Ok(t),
+            Err(e) => Err(Error::from(format!("{}: {}", s.to_string(), e))),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct Error {
     code: i32,
@@ -15,14 +40,20 @@ pub struct Error {
 
 impl Error {
     pub fn response<'a, T: 'a>(s: impl ToString) -> LocalBoxFuture<'a, Result<T, Self>> {
-        let err = Self::from_string(s);
+        let err = Self::from(s.to_string());
         futures::future::err(err).boxed_local()
     }
 
     pub fn from_string(s: impl ToString) -> Self {
+        Self::from(s.to_string())
+    }
+}
+
+impl From<String> for Error {
+    fn from(message: String) -> Self {
         Error {
             code: 1,
-            message: s.to_string(),
+            message,
             context: Default::default(),
         }
     }

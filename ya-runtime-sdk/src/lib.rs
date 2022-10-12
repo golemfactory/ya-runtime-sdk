@@ -6,6 +6,7 @@ pub use ya_runtime_api::server::{
 
 pub use cli::Command;
 pub use context::{Context, RunCommandContext, RunCommandExt};
+pub use error::{Error, ErrorExt};
 pub use event::{EventEmitter, EventKind};
 pub use runner::{build, run, run_with};
 pub use runtime::*;
@@ -20,6 +21,9 @@ mod runner;
 mod runtime;
 pub mod serialize;
 pub mod server;
+
+#[cfg(feature = "logger")]
+pub mod logger;
 
 #[cfg(feature = "macros")]
 #[allow(unused_imports)]
