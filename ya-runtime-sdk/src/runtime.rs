@@ -11,10 +11,12 @@ use crate::context::Context;
 use crate::error::Error;
 use crate::runtime_api::server::*;
 
+use ya_runtime_api::deploy::ContainerEndpoint;
+
 pub type ProcessId = u64;
 pub type EmptyResponse<'a> = LocalBoxFuture<'a, Result<(), Error>>;
 pub type OutputResponse<'a> = LocalBoxFuture<'a, Result<Option<serde_json::Value>, Error>>;
-pub type EndpointResponse<'a> = LocalBoxFuture<'a, Result<String, Error>>;
+pub type EndpointResponse<'a> = LocalBoxFuture<'a, Result<ContainerEndpoint, Error>>;
 pub type ProcessIdResponse<'a> = LocalBoxFuture<'a, Result<ProcessId, Error>>;
 
 /// Command handling interface for runtimes

@@ -55,6 +55,18 @@ where
     E: Env<<R as RuntimeDef>::Cli> + Send + 'static,
     F: FnOnce(&mut Context<R>) -> LocalBoxFuture<anyhow::Result<R>>,
 {
+    #[cfg(feature = "logger")]
+    {
+        if let Err(error) = crate::logger::start_file_logger() {
+            crate::logger::start_logger().expect("Failed to start logging");
+            log::warn!("Using fallback logging due to an error: {:?}", error);
+        };
+
+        std::panic::set_hook(Box::new(|e| {
+            log::error!("Runtime panic: {e}");
+        }));
+    }
+
     let mut ctx = Context::<R>::try_with(env)?;
     let mut runtime = factory(&mut ctx).await?;
 
@@ -88,8 +100,14 @@ where
                         runtime.start(&mut ctx)
                     };
 
-                    if let Some(out) = start.await.expect("Failed to start the runtime") {
-                        ctx.next_run_ctx().stdout(out.to_string()).await;
+                    match start.await {
+                        Ok(Some(out)) => {
+                            ctx.next_run_ctx().stdout(out.to_string()).await;
+                        }
+                        Err(err) => {
+                            panic!("Failed to start the runtime: {}", err);
+                        }
+                        _ => (),
                     }
 
                     Server::new(runtime, ctx)

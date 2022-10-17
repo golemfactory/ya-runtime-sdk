@@ -9,6 +9,8 @@ use ya_runtime_api::server::{
     RuntimeService,
 };
 
+pub use ya_runtime_api::deploy::ContainerEndpoint;
+
 use crate::runtime::RuntimeMode;
 use crate::{Context, Runtime, RuntimeDef};
 
@@ -85,8 +87,20 @@ impl<R: Runtime> RuntimeService for Server<R> {
         runtime
             .join_network(network, &mut ctx)
             .map(|result| {
-                result.map(|endpoint| CreateNetworkResp {
-                    endpoint: Some(Endpoint::Socket(endpoint)),
+                result.map(|e| CreateNetworkResp {
+                    endpoint: match &e {
+                        ContainerEndpoint::UnixStream(_) => {
+                            Some(Endpoint::UnixStream(e.to_string()))
+                        }
+                        ContainerEndpoint::UnixDatagram(_) => {
+                            Some(Endpoint::UnixDatagram(e.to_string()))
+                        }
+                        ContainerEndpoint::UdpDatagram(_) => {
+                            Some(Endpoint::UdpDatagram(e.to_string()))
+                        }
+                        ContainerEndpoint::TcpStream(_) => Some(Endpoint::TcpStream(e.to_string())),
+                        _ => None,
+                    },
                 })
             })
             .map_err(Into::into)
