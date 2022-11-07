@@ -1,3 +1,4 @@
+#![cfg(feature = "macros")]
 mod utils;
 
 use serde::{Deserialize, Serialize};
@@ -64,6 +65,7 @@ impl ya_runtime_sdk::env::Env<RuntimeCli> for Env {
         )
     }
 }
+
 #[derive(ya_runtime_sdk::RuntimeDef, Default)]
 #[conf(Conf)]
 #[cli(Cli)]
