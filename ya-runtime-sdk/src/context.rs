@@ -115,7 +115,7 @@ where
             anyhow::anyhow!("Unable to resolve parent directory of {}", path.display())
         })?;
         if !parent_dir.exists() {
-            std::fs::create_dir_all(&parent_dir).with_context(err)?;
+            std::fs::create_dir_all(parent_dir).with_context(err)?;
         }
 
         let contents = match extension.as_str() {
